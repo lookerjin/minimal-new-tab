@@ -80,10 +80,14 @@ def test_theme_reduced_motion_and_narrow_layout():
         page.locator('.search-submit').click()
         result=state(page)
         assert result['engine'] and result['combo'],result
-        # Chromium applies the reduced-motion pseudo-element style on the next style tick.
-        page.wait_for_timeout(30)
+        # Computed opacity can briefly be between frames even with reduced motion.
+        # Wait for the stable style instead of sampling after a fixed 30 ms sleep.
+        page.wait_for_function('''() => {
+          const ring=getComputedStyle(document.querySelector('.engine-control'),'::after');
+          return ring.animationName==='none' && Math.abs(Number(ring.opacity)-0.55)<0.005;
+        }''', timeout=2000)
         result=state(page)
-        assert result['ringAnimation']=='none' and result['ringOpacity']==.55,result
+        assert result['ringAnimation']=='none' and abs(result['ringOpacity']-.55)<.005,result
         assert result['ackAnimation']=='none',result
         assert result['navigation']=='https://www.google.com/search?q=edge%20performance',result
         # The ring tracks the *engine*, not the whole search form.
