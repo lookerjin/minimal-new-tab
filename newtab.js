@@ -102,16 +102,28 @@ function setEngineOpen(open, focusTarget=null){
 }
 // Search submission is purely text-based; keep the arrow visible but disable empty queries.
 function syncSubmitState(){searchSubmit.disabled=!query.value.trim();}
-// The suggestions code, bookmark queries and all network work are absent from first paint.
+// Lazy-load the entire local suggestion pipeline on first nonempty input.
+// Parallel local module loads; the controller loads only after its dependencies are ready.
 let suggestionsLoading = false;
-function loadSuggestions() {
+function loadLocalScript(path) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = path;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error(`Could not load ${path}`));
+    document.head.append(script);
+  });
+}
+async function loadSuggestions() {
   if (suggestionsLoading || window.NewTabSuggest) return;
   suggestionsLoading = true;
-  const script = document.createElement('script');
-  script.src = 'suggestions.js';
-  script.async = true;
-  script.onerror = () => { suggestionsLoading = false; };
-  document.head.append(script);
+  try {
+    await Promise.all(['query-analyzer.js', 'frecency.js', 'candidate-pipeline.js'].map(loadLocalScript));
+    await loadLocalScript('suggestions.js');
+  } catch (error) {
+    suggestionsLoading = false;
+    console.warn('Search suggestions unavailable:', error);
+  }
 }
 query.addEventListener('input', () => {
   syncSubmitState();
@@ -271,7 +283,11 @@ $('search-form').addEventListener('submit',(event)=>{
   const text=query.value.trim();
   if(!text)return;
   const destination=window.NewTabSuggest?.chosenDestination();
-  if(destination?.url){location.assign(destination.url);return;}
+  if(destination?.url){
+    window.NewTabSuggest?.recordNavigation(text,destination);
+    location.assign(destination.url);
+    return;
+  }
   const submitted=destination?.text||text;
   // Sync localStorage is intentionally written only when submitting, never while typing.
   try {
@@ -280,7 +296,7 @@ $('search-form').addEventListener('submit',(event)=>{
     const recent=Array.isArray(old)?old.filter(v=>typeof v==='string'&&v!==submitted):[];
     localStorage.setItem(key,JSON.stringify([submitted,...recent].slice(0,30)));
   } catch(_){}
-  window.NewTabSuggest?.recordSearch(submitted);
+  window.NewTabSuggest?.recordSearch(submitted,text,destination);
   location.assign(ENGINE_META[settings.engine].url+encodeURIComponent(submitted));
 });
 engineButton.addEventListener('click',()=>{setPanelOpen(false);setEngineOpen(!engineMenu.classList.contains('is-open'))});

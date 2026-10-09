@@ -1,34 +1,43 @@
 'use strict';
-
-// Candidate pipeline. Providers can be extended without changing UI.
+// Run independent providers concurrently. Report new snapshots as each finishes.
 (() => {
   const providers = [];
+  const identity = item => item.url ? `url:${item.url}` : `text:${String(item.text || '').normalize('NFKC').toLocaleLowerCase()}`;
 
   function register(provider) {
-    if (provider && typeof provider.provide === 'function') providers.push(provider);
+    if (!provider || typeof provider.provide !== 'function') throw new TypeError('Invalid candidate provider');
+    providers.push(provider);
+    return () => { const index = providers.indexOf(provider); if (index !== -1) providers.splice(index, 1); };
   }
-
-  async function collect(context = {}) {
-    const results = [];
-    for (const provider of providers) {
-      try {
-        const items = await provider.provide(context);
-        if (Array.isArray(items)) results.push(...items);
-      } catch (_) {}
-    }
-    return rank(results, context.query);
-  }
-
   function rank(items, query) {
-    if (window.FrecencyRank) return window.FrecencyRank.sort(items, query);
-
-    const q = String(query || '').toLocaleLowerCase();
-    return items.map(item => ({
-      ...item,
-      score: (item.score || 0) +
-        (String(item.text || '').toLocaleLowerCase().startsWith(q) ? 20 : 0)
-    })).sort((a, b) => b.score - a.score);
+    const seen = new Set();
+    const unique = [];
+    // Prefer the first candidate when identities collide (providers are registered by priority).
+    for (const item of items) {
+      if (!item || typeof item.text !== 'string' || !item.text.trim()) continue;
+      const key = identity(item);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(item);
+    }
+    return window.FrecencyRank ? window.FrecencyRank.sort(unique, query) : unique;
   }
-
-  window.CandidatePipeline = { register, collect, rank };
+  async function collect(context = {}, onUpdate = () => {}) {
+    const gathered = new Map();
+    const notify = () => {
+      if (context.signal?.aborted) return;
+      const all = [...gathered.values()].flat();
+      onUpdate(rank(all, context.query));
+    };
+    await Promise.all(providers.map(async (provider, index) => {
+      try {
+        const values = await provider.provide(context);
+        if (context.signal?.aborted) return;
+        gathered.set(index, Array.isArray(values) ? values : []);
+        notify();
+      } catch (_) { /* A failed optional provider must not block the others. */ }
+    }));
+    return context.signal?.aborted ? [] : rank([...gathered.values()].flat(), context.query);
+  }
+  window.CandidatePipeline = Object.freeze({ register, collect, rank });
 })();

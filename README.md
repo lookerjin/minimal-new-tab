@@ -103,3 +103,28 @@ can only be verified in a real Edge installation. No added network requests.
 ### 本地开发验证
 
 使用 Chromium 144 的模拟扩展 API，`test_suggestions.py` 完成 25 项测试和原版/新版各 15 次页面加载对照。在本次隔离执行环境中，`chrome-extension://` 真正安装行为和三个在线接口的实时可用性未被验证，仍需在目标 Edge 设备验收。性能数据不是与原生 Edge 新标签页的基准比较。
+
+
+## v1.5.1 搜索候选管线（本地开发版）
+
+本轮保持 Manifest V3、原生 JavaScript、零新增运行时依赖与原有权限，不读取浏览器历史记录：
+
+- **首屏不变**：`query-analyzer.js`、`frecency.js`、`candidate-pipeline.js`、`suggestions.js` 在首次输入非空搜索词后才从扩展本地并发/顺序加载（前三个模块并发，控制器随后加载）。
+- **独立 Provider**：识别直接网址、最近 30 条搜索、浏览器书签搜索和在线联想；相互独立并发返回，结果按来源增量合并，去重后最多展示 6 条。
+- **排序与反馈**：采用轻量文本相关性、来源优先级、选择次数、使用时间衰减与输入词关联；只在实际选中或提交时记录最多 80 条本地关联（`localStorage.minimalSuggestUsage`），不逐字保存输入。
+- **保守的网址导航**：`github.com`、`localhost:3000`、`192.168.1.10:5000` 等会作为访问网址的候选；没有选中建议时，回车仍按当前搜索引擎执行文本搜索。
+- **性能与隐私**：原有 110ms 书签防抖、240ms 在线建议防抖、950ms 网络中断、60 秒失败冷却和最多 40 条短期缓存继续保留。最近搜索最多 2 条、书签候选最多 3 条，保留在线建议的展示空间（本地已满则跳过多余网络请求）；网址及疑似带协议的 URL 不发送给联想服务；清空/切换/失焦均取消旧请求；关闭在线建议后不会继续发起新的联想请求。
+- **兼容原始数据**：保留现有 `minimalSearchHistory` 数组格式、设置键及 IndexedDB 壁纸，不增加迁移需求。
+
+### 本地验证
+
+仓库开发版包含 `tests/`（不会被发布版打包）：
+
+```bash
+node --test tests/search-core.test.cjs
+python -m pytest -q tests/test_search_ui.py
+```
+
+Node 单测覆盖网址识别、排序、Provider 并发与取消；Playwright 在本地 Chromium 中注入页面资源、模拟浏览器 API 和联想接口，测试候选、选中后异步更新、提交、过期结果屏蔽与隐私开关。后者依赖 Python Playwright 和本机 Chromium，仅属于模拟集成验证。
+
+**真实 Edge 待验收**：加载扩展后的脚本延迟、扩展 API、三个线上建议服务的实时可用性、真实 CORS/Host 权限表现、扩展更新前后的本地使用记录，需要在目标浏览器进行测试。联网联想接口均不是稳定的官方公共承诺 API。
