@@ -1,11 +1,19 @@
 name: Release
 
 on:
+  # The normal path: Actions -> Release -> Run workflow (branch: main).
+  workflow_dispatch:
+  # Keep existing tag-based releases as an optional fallback.
   push:
     tags: ['v*']
 
 permissions:
   contents: read
+
+# Do not publish two releases at once, including retries or manual tag pushes.
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   test:
@@ -16,32 +24,107 @@ jobs:
   publish:
     needs: test
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false
-      - name: Validate tag, version and main ancestry
+      # Publish exactly the package produced and validated by the test job.
+      - name: Download tested extension package
+        uses: actions/download-artifact@v4
+        with:
+          name: edge-extension-${{ github.sha }}
+          path: dist
+
+      - name: Validate release target and package
+        id: validate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(python -c 'import json; print(json.load(open("manifest.json", encoding="utf-8"))["version"])')"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || {
+            echo 'Invalid manifest version' >&2
+            exit 1
+          }
+          tag="v${version}"
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || {
+            echo 'Checkout differs from workflow commit' >&2
+            exit 1
+          }
+          git fetch origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo 'Release commit must belong to main' >&2
+            exit 1
+          }
+          if [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]]; then
+            [[ "$GITHUB_REF" == 'refs/heads/main' ]] || {
+              echo 'Manual releases must be dispatched from main' >&2
+              exit 1
+            }
+            [[ "$GITHUB_SHA" == "$(git rev-parse origin/main)" ]] || {
+              echo 'main has advanced; run the release workflow again at its latest commit' >&2
+              exit 1
+            }
+          else
+            [[ "$GITHUB_REF" == "refs/tags/$tag" ]] || {
+              echo 'Pushed tag does not match manifest version' >&2
+              exit 1
+            }
+          fi
+          zip="dist/minimal-new-tab-${tag}-edge.zip"
+          checksum="${zip}.sha256"
+          [[ -f "$zip" && -f "$checksum" ]] || {
+            echo 'Expected CI-built ZIP and SHA-256 file are missing' >&2
+            exit 1
+          }
+          (cd dist && sha256sum -c "$(basename "$checksum")")
+          # Verify that the ZIP really packages this exact manifest.
+          unzip -p "$zip" manifest.json | cmp - manifest.json
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; never overwrite a published version" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --refs origin "refs/tags/$tag" >/dev/null; then
+            git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag"
+            [[ "$(git rev-list -n 1 "$tag")" == "$GITHUB_SHA" ]] || {
+              echo "Tag $tag exists but points to another commit" >&2
+              exit 1
+            }
+            echo 'tag_exists=true' >> "$GITHUB_OUTPUT"
+          else
+            [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || {
+              echo "Tag $tag is missing" >&2
+              exit 1
+            }
+            echo 'tag_exists=false' >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create annotated release tag
+        if: steps.validate.outputs.tag_exists == 'false'
+        env:
+          TAG: ${{ steps.validate.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || exit 1
-          git fetch origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
-            echo 'Release tag must refer to a commit already merged into main' >&2
-            exit 1
-          }
-          python scripts/package.py --version "$GITHUB_REF_NAME"
-          cd dist
-          sha256sum -c "minimal-new-tab-${GITHUB_REF_NAME}-edge.zip.sha256"
-      - name: Create GitHub Release
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$TAG" "$GITHUB_SHA" -m "Release $TAG"
+          git push origin "refs/tags/$TAG"
+
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.validate.outputs.tag }}
         shell: bash
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            "dist/minimal-new-tab-${GITHUB_REF_NAME}-edge.zip" \
-            "dist/minimal-new-tab-${GITHUB_REF_NAME}-edge.zip.sha256" \
-            --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+          set -euo pipefail
+          gh release create "$TAG" \
+            "dist/minimal-new-tab-${TAG}-edge.zip" \
+            "dist/minimal-new-tab-${TAG}-edge.zip.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --generate-notes --title "$TAG"
