@@ -2,7 +2,7 @@
 
 一个本地优先、简洁快速的桌面 **Microsoft Edge / Chromium 新标签页扩展**。使用 Manifest V3、原生 HTML/CSS/JavaScript；不依赖服务器、构建框架或运行时第三方 JS 包。
 
-> 当前版本：**1.5.12（首次 Edge 商店发布候选，本地准备中）**。GitHub Tag/Release 和 Edge 商店上架将在完成发布流程后建立。
+> 当前版本：**1.5.12（首次 Edge 商店发布候选）**。正式 ZIP 由 GitHub Actions 发布到 GitHub Release；Edge 商店上架将在完成发布流程后建立。
 
 ## 功能
 
@@ -57,8 +57,8 @@ python scripts/package.py --version v1.5.12
 
 ## 发布
 
-- `feat/**` → Pull Request → `main` → `vX.Y.Z` annotated Tag → GitHub Release。
-- GitHub Actions 负责 PR / 分支测试、包校验和 Tag 后的 Release 资产生成。
+- `feat/**` → Pull Request → `main` → Actions 的 **Release / Run workflow** → 自动 annotated Tag + GitHub Release。
+- GitHub Actions 负责完整回归、一次打包及校验，Release 直接复用已通过 CI 的 ZIP；仍保留手动推送版本 Tag 的备用触发方式。
 - 首次 Edge Add-ons Hidden 发布需要通过微软 Partner Center 手动提交；后续版本可进一步接入官方 Update API。
 - 详见 [发布说明](docs/RELEASING.md) 与 [更新日志](CHANGELOG.md)。
 
