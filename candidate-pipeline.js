@@ -1,6 +1,6 @@
 'use strict';
 
-// Candidate pipeline foundation. Providers can be extended without changing UI.
+// Candidate pipeline. Providers can be extended without changing UI.
 (() => {
   const providers = [];
 
@@ -8,7 +8,7 @@
     if (provider && typeof provider.provide === 'function') providers.push(provider);
   }
 
-  async function collect(context) {
+  async function collect(context = {}) {
     const results = [];
     for (const provider of providers) {
       try {
@@ -20,12 +20,13 @@
   }
 
   function rank(items, query) {
+    if (window.FrecencyRank) return window.FrecencyRank.sort(items, query);
+
     const q = String(query || '').toLocaleLowerCase();
     return items.map(item => ({
       ...item,
       score: (item.score || 0) +
-        (String(item.text || '').toLocaleLowerCase().startsWith(q) ? 20 : 0) +
-        (item.type === 'url' || item.type === 'bookmark' ? 10 : 0)
+        (String(item.text || '').toLocaleLowerCase().startsWith(q) ? 20 : 0)
     })).sort((a, b) => b.score - a.score);
   }
 
