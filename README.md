@@ -2,7 +2,7 @@
 
 一个本地优先、简洁快速的桌面 **Microsoft Edge / Chromium 新标签页扩展**。使用 Manifest V3、原生 HTML/CSS/JavaScript；不依赖服务器、构建框架或运行时第三方 JS 包。
 
-> 当前版本：**1.5.11（首次 Edge 商店发布候选）**。GitHub Tag/Release 和 Edge 商店上架将在完成发布流程后建立。
+> 当前版本：**1.5.12（首次 Edge 商店发布候选，本地准备中）**。GitHub Tag/Release 和 Edge 商店上架将在完成发布流程后建立。
 
 ## 功能
 
@@ -39,7 +39,7 @@
 | `www.bing.com` | 选择必应每日壁纸时下载图像 |
 | 可选 HTTPS 域名权限 | 用户选择特定远程壁纸时，按需申请访问权限 |
 
-本地壁纸图片仅保存在用户设备的 IndexedDB 中。项目不自行搭建遥测或用户信息服务。**正式上架前还需要提供公开隐私政策，并核对相关平台条款。**
+本地壁纸图片仅保存在用户设备的 IndexedDB 中。项目不自行搭建遥测或用户信息服务。**隐私政策草案**：见 [docs/PRIVACY.md](docs/PRIVACY.md)（正式提交前须确认公开 URL 和数据披露）。
 
 ## 开发与测试
 
@@ -50,10 +50,10 @@ node --test tests/search-core.test.cjs
 python -m pip install -r requirements-test.txt
 python -m playwright install chromium
 python -m pytest -q tests/
-python scripts/package.py --version v1.5.11
+python scripts/package.py --version v1.5.12
 ```
 
-打包脚本生成 `dist/minimal-new-tab-v1.5.11-edge.zip`，其中 `manifest.json` 位于 ZIP 根目录，并附带 SHA-256 校验文件。测试使用模拟的浏览器 API，不等于已完成真实 Edge 扩展安装验收。
+打包脚本生成 `dist/minimal-new-tab-v1.5.12-edge.zip`，其中 `manifest.json` 位于 ZIP 根目录，并附带 SHA-256 校验文件。测试使用模拟的浏览器 API，不等于已完成真实 Edge 扩展安装验收。
 
 ## 发布
 
