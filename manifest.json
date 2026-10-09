@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Minimal New Tab",
-  "version": "1.5.1",
+  "version": "1.5.5",
   "description": "本地优先的新标签页：搜索、按需搜索建议、壁纸和书签导航。",
   "permissions": [
     "storage",

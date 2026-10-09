@@ -8,6 +8,13 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_query_resolver_loads_before_main_page_logic():
+    """Defer order is essential for paste + immediate Enter on a real new tab."""
+    html = (ROOT / 'newtab.html').read_text()
+    assert html.index('<script src="query-analyzer.js" defer>') < html.index('<script src="newtab.js" defer>')
+    assert "'query-analyzer.js'" not in (ROOT / 'newtab.js').read_text()
+
+
 def test_search_ui():
     html = (ROOT / 'newtab.html').read_text()
     html = re.sub(r'<script\s+src="[^"]+"\s*(?:defer)?\s*></script>', '', html)
@@ -37,6 +44,13 @@ def test_search_ui():
               getTree: async () => [{children:[]}],
               search: async (q) => {
                 if (q === 'python') await new Promise(r => setTimeout(r, 450));
+                if (q === 'racing') {
+                  await new Promise(r => setTimeout(r, 520));
+                  return Array.from({length:3}, (_,i) => ({
+                    id:'racing'+i, title:'racing bookmark '+i,
+                    url:'https://example.org/racing/'+i
+                  }));
+                }
                 if (q === 'many') return Array.from({length:12}, (_,i) => ({
                   id:String(100+i), title:'many link '+i, url:'https://example.org/many/'+i
                 }));
@@ -57,16 +71,17 @@ def test_search_ui():
             if (url.includes('slow')) await new Promise(r => setTimeout(r,380));
             if (options?.signal?.aborted) throw new DOMException('AbortError','AbortError');
             const values = url.includes('slow') ? ['slow unique result'] :
+              url.includes('racing') ? Array.from({length:10}, (_,i) => 'racing suggestion '+i) :
               url.includes('many') ? ['many online help'] : ['git tutorial','git workflow','github docs'];
             return new Response(JSON.stringify(['query', values]),
               {status:200, headers:{'content-type':'application/json'}});
           };
         }""")
-        for name in ['boot.js','site-icons.js','newtab.js','bookmarks.js',
-                     'query-analyzer.js','frecency.js','candidate-pipeline.js','suggestions.js']:
+        for name in ['boot.js','site-icons.js','query-analyzer.js','newtab.js','bookmarks.js',
+                     'frecency.js','candidate-pipeline.js','suggestions.js']:
             js = (ROOT / name).read_text()
             if name == 'newtab.js':
-                js = js.replace('location.assign(destination.url)', 'window.__navigations.push(destination.url)')
+                js = js.replace('location.assign(action.url)', 'window.__navigations.push(action.url)')
                 js = js.replace('location.assign(ENGINE_META[settings.engine].url+encodeURIComponent(submitted))',
                                 'window.__navigations.push(ENGINE_META[settings.engine].url+encodeURIComponent(submitted))')
             page.add_script_tag(content=js)
@@ -91,13 +106,53 @@ def test_search_ui():
         stats = page.evaluate("JSON.parse(localStorage.getItem('minimalSuggestUsage'))")
         assert stats and stats[0]['key'].startswith('url:')
 
+        # If late bookmarks displace an online suggestion from the top six,
+        # the user's keyboard highlight must stay on the same item and row.
+        q.fill('racing')
+        page.wait_for_timeout(340)
+        assert options.count() == 6
+        q.press('ArrowUp')  # Select the sixth online suggestion.
+        highlighted = page.evaluate('window.NewTabSuggest.chosenDestination()')
+        assert highlighted['type'] == 'online'
+        assert page.evaluate("document.querySelector('#query').getAttribute('aria-activedescendant')") == 'search-suggestion-5'
+        page.wait_for_timeout(460)
+        kept = page.evaluate('window.NewTabSuggest.chosenDestination()')
+        assert kept['text'] == highlighted['text']
+        assert page.evaluate("document.querySelector('#query').getAttribute('aria-activedescendant')") == 'search-suggestion-5'
+        q.press('Enter')
+        assert page.evaluate('window.__navigations.at(-1)').endswith('racing%20suggestion%205')
+
+        remote_before_url = page.evaluate('window.__remote.length')
         q.fill('github.com')
         page.wait_for_timeout(340)
         assert page.locator('.suggestion-label').first.inner_text() == '访问网址'
-        assert page.evaluate('window.__remote.length') == 1  # URLs stay local.
-        # No URL auto-navigation on an unselected search.
+        assert page.locator('.suggestion-label').nth(1).inner_text() == '使用 Google 搜索'
+        assert page.evaluate('window.__remote.length') == remote_before_url  # URLs stay local.
+        assert page.locator('.search-submit').get_attribute('aria-label') == '访问网址'
+        # A literal URL is a navigation even with no highlighted candidate.
         q.press('Enter')
-        assert page.evaluate('window.__navigations.at(-1)').startswith('https://www.google.com/search?q=')
+        assert page.evaluate('window.__navigations.at(-1)') == 'https://github.com/'
+        # ArrowDown twice explicitly selects the secondary search action.
+        q.fill('github.com')
+        page.wait_for_timeout(130)
+        q.press('ArrowDown')
+        assert page.locator('.search-submit').get_attribute('aria-label') == '访问网址'
+        q.press('ArrowDown')
+        assert page.evaluate('window.NewTabSuggest.chosenDestination().type') == 'search'
+        assert page.locator('.search-submit').get_attribute('aria-label') == '搜索'
+        q.press('Enter')
+        assert page.evaluate('window.__navigations.at(-1)') == 'https://www.google.com/search?q=github.com'
+        # Mouse click on the secondary action also overrides URL classification.
+        q.fill('github.com')
+        page.wait_for_timeout(130)
+        page.locator('.suggestion-item').nth(1).click()
+        assert page.evaluate('window.__navigations.at(-1)') == 'https://www.google.com/search?q=github.com'
+        # A plain term never inherits the navigation behavior from top-ranked bookmarks.
+        q.fill('github')
+        page.wait_for_timeout(160)
+        assert page.locator('.search-submit').get_attribute('aria-label') == '搜索'
+        q.press('Enter')
+        assert page.evaluate('window.__navigations.at(-1)') == 'https://www.google.com/search?q=github'
 
         # Stale bookmark results must not appear for a newer query.
         q.fill('python')
@@ -130,18 +185,27 @@ def test_search_ui():
         page.wait_for_timeout(370)
         assert page.evaluate('window.__remote.length') == before
         q.press('Escape')
-        assert page.locator('#search-suggestions').is_hidden()
+        assert q.get_attribute('aria-expanded') == 'false'
+        page.locator('#search-suggestions').wait_for(state='hidden')
         # IME composition must not produce intermediate suggestions.
         q.fill('')
         q.dispatch_event('compositionstart')
         q.fill('中')
-        assert page.locator('#search-suggestions').is_hidden()
+        assert q.get_attribute('aria-expanded') == 'false'
+        page.locator('#search-suggestions').wait_for(state='hidden')
         q.dispatch_event('compositionend')
         page.wait_for_timeout(170)
         assert '中文文档' in page.locator('.suggestion-title').all_inner_texts()
         q.press('Escape')
-        assert page.locator('#search-suggestions').is_hidden()
+        assert q.get_attribute('aria-expanded') == 'false'
+        page.locator('#search-suggestions').wait_for(state='hidden')
         assert page.evaluate("document.querySelector('#query').getAttribute('aria-activedescendant')") is None
+        # In-memory aggregate diagnostics never include typed text or visited URLs.
+        metrics = page.evaluate('window.NewTabSuggest.diagnostics()')
+        assert metrics['completedQueries'] >= 1
+        assert metrics['firstCandidate']['samples'] >= 1
+        assert metrics['providers']['bookmark']['samples'] >= 1
+        assert 'racing suggestion' not in str(metrics)
         assert not errors, errors
         browser.close()
 
@@ -183,13 +247,35 @@ def test_lazy_bootstrap():
           };
           window.fetch = async () => new Response(JSON.stringify(['git', ['git tutorial']]), {status:200});
         }""")
-        page.add_script_tag(content=(ROOT / 'newtab.js').read_text())
+        page.add_script_tag(content=(ROOT / 'query-analyzer.js').read_text())
+        bootstrap = (ROOT / 'newtab.js').read_text()
+        bootstrap = bootstrap.replace('location.assign(action.url)', 'window.__navigations.push(action.url)')
+        bootstrap = bootstrap.replace('location.assign(ENGINE_META[settings.engine].url+encodeURIComponent(submitted))',
+            'window.__navigations.push(ENGINE_META[settings.engine].url+encodeURIComponent(submitted))')
+        page.evaluate('window.__navigations = []')
+        page.add_script_tag(content=bootstrap)
         assert page.evaluate('typeof window.NewTabSuggest') == 'undefined'
+        assert loaded == []
+        # Submit without any input event or lazy script: no race with loading.
+        page.evaluate("""() => {
+          document.querySelector('#query').value='github.com';
+          document.querySelector('#search-form').requestSubmit();
+        }""")
+        assert page.evaluate('window.__navigations.at(-1)') == 'https://github.com/'
+        assert loaded == []
+        page.evaluate("""() => {
+          document.querySelector('#query').value='golang 教程';
+          document.querySelector('#search-form').requestSubmit();
+        }""")
+        assert page.evaluate('window.__navigations.at(-1)') == 'https://www.google.com/search?q=golang%20%E6%95%99%E7%A8%8B'
         assert loaded == []
         page.locator('#query').fill('git')
         page.wait_for_function("typeof window.NewTabSuggest !== 'undefined'")
         page.wait_for_timeout(200)
-        assert set(loaded) == {'query-analyzer.js', 'frecency.js', 'candidate-pipeline.js', 'suggestions.js'}
+        assert set(loaded) == {'frecency.js', 'candidate-pipeline.js', 'suggestions.js'}
         assert page.locator('.suggestion-item').count() >= 1
+        data = page.evaluate('window.NewTabSuggest.diagnostics()')
+        assert data['moduleLoadMs'] is not None
+        assert data['moduleLoadMs'] >= 0
         assert not errors, errors
         browser.close()

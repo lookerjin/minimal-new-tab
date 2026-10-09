@@ -4,8 +4,18 @@
   const input = document.getElementById('query');
   const list = document.getElementById('search-suggestions');
   const form = document.getElementById('search-form');
+  const combo = document.querySelector('.search-combo');
+  const ghostLayer = document.createElement('div');
+  ghostLayer.className = 'suggestion-ghost-layer';
+  ghostLayer.setAttribute('aria-hidden', 'true');
+  ghostLayer.inert = true;
+  combo.append(ghostLayer);
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const PANEL_DURATION = 300; // Matches the search-engine capsule expansion.
+  let hideTimer = null;
   const MAX_ITEMS = 6;
   const MAX_BOOKMARK_CANDIDATES = 80;
+  const MAX_DIAGNOSTIC_SAMPLES = 40;
   const REMOTE_DELAY = 240;
   const REMOTE_TIMEOUT = 950;
   const CACHE_TTL = 180000;
@@ -21,7 +31,8 @@
     en: {url:'Visit URL', history:'Recent', bookmark:'Bookmark', online:'Suggest'}
   };
   const normalize = value => String(value || '').normalize('NFKC').toLocaleLowerCase();
-  const keyFor = item => item.url ? `url:${item.url}` : `text:${normalize(item.text)}`;
+  const keyFor = item => item.url ? `url:${item.url}`
+    : `${item.type === 'search' ? 'search' : 'text'}:${normalize(item.text)}`;
   let generation = 0;
   let activeRequest = null;
   let composing = false;
@@ -32,6 +43,8 @@
   let currentText = '';
   let history = [];
   let usage = [];
+  // Timings are memory-only and contain no query text, URLs or candidate titles.
+  const diagnosticSamples = [];
 
   try {
     const saved = JSON.parse(localStorage.getItem('minimalSearchHistory') || '[]');
@@ -73,10 +86,33 @@
     if (activeRequest) activeRequest.abort();
     activeRequest = null;
   }
+  const panelOpen = () => combo.classList.contains('is-suggesting');
+  function setPanelHeight(height) {
+    // The search capsule stays at its original size; only its single backplate grows.
+    combo.style.setProperty('--suggestion-height', `${height}px`);
+    list.style.height = `${height}px`;
+  }
   function hide() {
-    list.hidden = true;
+    // Keep outgoing rows inside the shrinking backplate until the animation finishes.
     input.setAttribute('aria-expanded', 'false');
     input.removeAttribute('aria-activedescendant');
+    list.setAttribute('aria-hidden', 'true');
+    list.inert = true;
+    combo.classList.remove('is-suggesting');
+    document.dispatchEvent(new Event('newtab-suggestion-selection-changed'));
+    setPanelHeight(0);
+    clearTimeout(hideTimer);
+    ghostLayer.replaceChildren();
+    if (reduceMotion.matches || list.hidden) {
+      list.hidden = true;
+      list.replaceChildren();
+    } else {
+      hideTimer = setTimeout(() => {
+        if (panelOpen()) return;
+        list.hidden = true;
+        list.replaceChildren();
+      }, PANEL_DURATION);
+    }
   }
   function close() {
     generation++;
@@ -85,7 +121,6 @@
     selected = -1;
     selectedKey = null;
     items = [];
-    list.replaceChildren();
     hide();
   }
   function candidateIcon(type) {
@@ -103,41 +138,138 @@
       input.setAttribute('aria-activedescendant', `search-suggestion-${selected}`);
       list.children[selected]?.scrollIntoView({block:'nearest'});
     } else input.removeAttribute('aria-activedescendant');
+    document.dispatchEvent(new Event('newtab-suggestion-selection-changed'));
+  }
+  function createRow() {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'suggestion-item';
+    button.setAttribute('role', 'option');
+    const title = document.createElement('span');
+    title.className = 'suggestion-title';
+    const label = document.createElement('span');
+    label.className = 'suggestion-label';
+    button.append(candidateIcon('online'), title, label);
+    // The candidate is refreshed on reconciliation; this handler never captures stale data.
+    button.addEventListener('pointerdown', event => event.preventDefault());
+    button.addEventListener('click', () => {
+      const item = button._candidate;
+      if (!item || !panelOpen()) return;
+      selectedKey = keyFor(item);
+      selected = items.findIndex(row => keyFor(row) === selectedKey);
+      form.requestSubmit();
+    });
+    return button;
   }
   function draw() {
-    if (dismissed || !currentText || document.activeElement !== input) { hide(); return; }
+    if (dismissed || !currentText || document.activeElement !== input || !items.length) {
+      hide();
+      return;
+    }
+    clearTimeout(hideTimer);
+    const opening = !panelOpen();
+    // Reuse visible rows by candidate identity so typing does not flash all content.
+    const existing = new Map([...list.children].map(row => [row.dataset.key, row]));
+    const before = new Map();
+    if (!reduceMotion.matches && !opening) {
+      for (const row of list.children) before.set(row.dataset.key, row.getBoundingClientRect());
+    }
+    const nextKeys = new Set(items.map(keyFor));
+    ghostLayer.replaceChildren();
+    if (!opening && !reduceMotion.matches) {
+      const layerTop = list.getBoundingClientRect().top;
+      for (const [key, row] of existing) {
+        if (nextKeys.has(key)) continue;
+        const rect = before.get(key);
+        if (!rect) continue;
+        const ghost = row.cloneNode(true);
+        ghost.className = 'suggestion-ghost';
+        ghost.removeAttribute('role');
+        ghost.removeAttribute('id');
+        ghost.setAttribute('aria-hidden', 'true');
+        ghost.tabIndex = -1;
+        ghost.style.top = `${rect.top - layerTop}px`;
+        ghostLayer.append(ghost);
+        ghost.animate([{opacity:1,transform:'translateY(0)'},
+          {opacity:0,transform:'translateY(-7px)'}],
+          {duration:170,easing:'cubic-bezier(.2,.75,.25,1)'}).onfinish = () => ghost.remove();
+      }
+    }
     const fragment = document.createDocumentFragment();
+    const inserted = [];
     items.forEach((item, index) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'suggestion-item';
-      button.id = `search-suggestion-${index}`;
-      button.setAttribute('role', 'option');
-      button.setAttribute('aria-selected', String(index === selected));
-      const title = document.createElement('span');
-      title.className = 'suggestion-title';
+      const key = keyFor(item);
+      const row = existing.get(key) || createRow();
+      if (!existing.has(key)) inserted.push(row);
+      else row.getAnimations().forEach(animation => animation.cancel());
+      row.dataset.key = key;
+      row._candidate = item;
+      row.id = `search-suggestion-${index}`;
+      row.setAttribute('aria-selected', String(index === selected));
+      row.querySelector('.suggestion-icon').textContent = item.type === 'bookmark' || item.type === 'url'
+        ? '↗' : item.type === 'history' ? '↶' : '⌕';
+      const title = row.querySelector('.suggestion-title');
       title.textContent = item.text;
       title.title = item.url || item.text;
-      const label = document.createElement('span');
-      label.className = 'suggestion-label';
-      label.textContent = (labels[settings.locale] || labels.zh)[item.type] || '';
-      button.append(candidateIcon(item.type), title, label);
-      button.addEventListener('pointerdown', event => event.preventDefault());
-      button.addEventListener('click', () => {
-        selectedKey = keyFor(item);
-        selected = items.findIndex(row => keyFor(row) === selectedKey);
-        form.requestSubmit();
-      });
-      fragment.append(button);
+      row.querySelector('.suggestion-label').textContent = item.type === 'search'
+        ? (settings.locale === 'en' ? `Search with ${ENGINE_META[settings.engine].name}`
+          : `使用 ${ENGINE_META[settings.engine].name} 搜索`)
+        : ((labels[settings.locale] || labels.zh)[item.type] || '');
+      fragment.append(row);
     });
     list.replaceChildren(fragment);
-    list.hidden = !items.length;
-    input.setAttribute('aria-expanded', String(!!items.length));
+    list.hidden = false;
+    list.inert = false;
+    list.setAttribute('aria-hidden', 'false');
+    // Max 6 rows; scroll if the viewport is too short for all of them.
+    const available = Math.max(0, window.innerHeight - list.getBoundingClientRect().top - 12);
+    const contentHeight = [...list.children].reduce((sum, row) => sum + row.offsetHeight, 0) + 16;
+    const targetHeight = Math.min(contentHeight, 332, available);
+    // When the dropdown has never been laid out, let the browser paint 0 -> target.
+    if (opening) {
+      setPanelHeight(0);
+      combo.classList.add('is-suggesting');
+      void combo.offsetHeight;
+    }
+    setPanelHeight(targetHeight);
+    input.setAttribute('aria-expanded', 'true');
     updateActive();
+    if (reduceMotion.matches) return;
+    // FLIP existing items, fade/slide only genuinely new results.
+    for (const row of list.children) {
+      const old = before.get(row.dataset.key);
+      if (old) {
+        const current = row.getBoundingClientRect();
+        const shift = old.top - current.top;
+        if (Math.abs(shift) > 1) {
+          row.animate([{transform:`translateY(${shift}px)`},{transform:'translateY(0)'}],
+            {duration:260, easing:'cubic-bezier(.2,.75,.25,1)'});
+        }
+      } else if (inserted.includes(row) && !opening) {
+        row.animate([{opacity:0,transform:'translateY(-7px)'},{opacity:1,transform:'translateY(0)'}],
+          {duration:220, easing:'cubic-bezier(.2,.75,.25,1)'});
+      }
+    }
   }
   function showCandidates(candidates) {
-    // Preserve the selected destination by identity, not its unstable array index.
-    items = candidates.slice(0, MAX_ITEMS);
+    // The two explicit actions for a URL stay visible and in a predictable
+    // order, regardless of frecency or when bookmarks finish loading.
+    if (QueryAnalyzer.analyze(currentText).type === 'url') {
+      const visit = candidates.find(item => item.type === 'url');
+      const search = candidates.find(item => item.type === 'search');
+      candidates = [visit, search, ...candidates.filter(item => item !== visit && item !== search)].filter(Boolean);
+    }
+    // Once the user moves the keyboard highlight, async arrivals must neither
+    // change its position nor evict its destination from the visible six rows.
+    const pinned = selectedKey && (candidates.find(item => keyFor(item) === selectedKey)
+      || items.find(item => keyFor(item) === selectedKey));
+    if (pinned && selected >= 0) {
+      const remaining = candidates.filter(item => keyFor(item) !== selectedKey).slice(0, MAX_ITEMS - 1);
+      remaining.splice(Math.min(selected, remaining.length), 0, pinned);
+      items = remaining;
+    } else {
+      items = candidates.slice(0, MAX_ITEMS);
+    }
     selected = selectedKey ? items.findIndex(item => keyFor(item) === selectedKey) : -1;
     if (selected < 0) selectedKey = null;
     draw();
@@ -188,12 +320,17 @@
 
   // Providers do not know about the DOM or each other.
   CandidatePipeline.register({
+    name:'url',
     async provide({query}) {
       const parsed = QueryAnalyzer.analyze(query);
-      return parsed.type === 'url' ? [{type:'url', text:parsed.raw, url:parsed.url}] : [];
+      return parsed.type === 'url' ? [
+        {type:'url', text:parsed.raw, url:parsed.url},
+        {type:'search', text:parsed.raw}
+      ] : [];
     }
   });
   CandidatePipeline.register({
+    name:'history',
     async provide({query}) {
       const needle = normalize(query);
       return FrecencyRank.sort(history.filter(value => normalize(value).includes(needle))
@@ -201,6 +338,7 @@
     }
   });
   CandidatePipeline.register({
+    name:'bookmark',
     async provide(context) {
       if (!chrome.bookmarks?.search || !await delay(110, context.signal)) return [];
       try {
@@ -215,6 +353,7 @@
     }
   });
   CandidatePipeline.register({
+    name:'online',
     async provide(context) {
       // URLs and potentially sensitive URL-like input should never be sent to suggest APIs.
       if (context.intent === 'url' || /^https?:\/\//i.test(context.query)) return [];
@@ -224,6 +363,31 @@
       return requestOnline(context);
     }
   });
+
+  const round = value => Math.round(value * 10) / 10;
+  function summarize(values) {
+    const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+    if (!sorted.length) return {samples:0, p50Ms:null, p95Ms:null};
+    const at = quantile => sorted[Math.ceil(quantile * sorted.length) - 1];
+    return {samples:sorted.length, p50Ms:round(at(.5)), p95Ms:round(at(.95))};
+  }
+  function diagnostics() {
+    const providers = {};
+    for (const name of ['url', 'history', 'bookmark', 'online']) {
+      providers[name] = summarize(diagnosticSamples
+        .map(sample => sample.providers[name]?.elapsedMs));
+    }
+    const load = performance.getEntriesByName('minimal-new-tab-suggestions-load', 'measure').at(-1);
+    return {
+      // No localStorage writes, raw searches, history or URLs in this snapshot.
+      completedQueries:diagnosticSamples.length,
+      moduleLoadMs:load ? round(load.duration) : null,
+      firstCandidate:summarize(diagnosticSamples.map(sample => sample.firstCandidateMs)),
+      firstLocal:summarize(diagnosticSamples.map(sample => sample.firstLocalMs)),
+      firstOnline:summarize(diagnosticSamples.map(sample => sample.firstOnlineMs)),
+      providers
+    };
+  }
 
   function update() {
     abortWork();
@@ -238,34 +402,48 @@
     const controller = new AbortController();
     activeRequest = controller;
     let localCount = 0;
+    const sample = {start:performance.now(), firstCandidateMs:null, firstLocalMs:null,
+      firstOnlineMs:null, providers:{}};
     const context = {
       query:currentText,
       intent:QueryAnalyzer.analyze(currentText).type,
       engine:settings.engine,
       locale:settings.locale,
       signal:controller.signal,
-      localCount: () => localCount
+      localCount: () => localCount,
+      onProviderSettled: ({name, elapsedMs, count}) => {
+        sample.providers[name] = {elapsedMs:round(elapsedMs), count};
+      }
     };
     void CandidatePipeline.collect(context, candidates => {
       if (token !== generation || controller.signal.aborted) return;
       localCount = candidates.filter(item => item.type !== 'online').length;
       showCandidates(candidates.map(item => usageFor(item, currentText))
         .sort((a, b) => FrecencyRank.score(b, currentText) - FrecencyRank.score(a, currentText)));
+      if (!panelOpen()) return;
+      const elapsed = round(performance.now() - sample.start);
+      if (sample.firstCandidateMs === null) sample.firstCandidateMs = elapsed;
+      if (sample.firstLocalMs === null && candidates.some(item => item.type !== 'online')) sample.firstLocalMs = elapsed;
+      if (sample.firstOnlineMs === null && candidates.some(item => item.type === 'online')) sample.firstOnlineMs = elapsed;
+    }).then(() => {
+      if (token !== generation || controller.signal.aborted) return;
+      diagnosticSamples.push(sample);
+      if (diagnosticSamples.length > MAX_DIAGNOSTIC_SAMPLES) diagnosticSamples.shift();
     });
   }
   input.addEventListener('compositionstart', () => { composing = true; abortWork(); hide(); });
   input.addEventListener('compositionend', () => { composing = false; update(); });
   input.addEventListener('input', event => { if (!composing && !event.isComposing) update(); });
-  input.addEventListener('focus', () => { if (input.value.trim() && list.hidden) update(); });
+  input.addEventListener('focus', () => { if (input.value.trim() && !panelOpen()) update(); });
   input.addEventListener('keydown', event => {
     if (composing || event.isComposing || event.keyCode === 229) {
       if (event.key === 'Enter') event.preventDefault();
       return;
     }
-    if (event.key === 'Escape' && !list.hidden) {
+    if (event.key === 'Escape' && panelOpen()) {
       event.preventDefault(); event.stopPropagation(); close(); return;
     }
-    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && items.length && !list.hidden) {
+    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && items.length && panelOpen()) {
       event.preventDefault();
       selected = event.key === 'ArrowDown' ? (selected + 1) % items.length
         : (selected <= 0 ? items.length - 1 : selected - 1);
@@ -278,13 +456,17 @@
     if (!list.contains(event.target) && event.target !== input) close();
   });
   document.addEventListener('newtab-locale-changed', draw);
+  window.addEventListener('resize', () => { if (panelOpen()) draw(); });
+  list.inert = true;
+  list.setAttribute('aria-hidden', 'true');
   window.NewTabSuggest = Object.freeze({
     close,
     engineChanged: update,
     onlineChanged: update,
     recordSearch,
     recordNavigation: recordChoice,
-    chosenDestination: () => selected >= 0 && !list.hidden ? items[selected] : null
+    diagnostics,
+    chosenDestination: () => selected >= 0 && panelOpen() ? items[selected] : null
   });
   if (input.value.trim()) update();
 })();

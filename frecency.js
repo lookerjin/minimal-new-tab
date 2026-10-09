@@ -1,7 +1,7 @@
 'use strict';
 // Small ranking function, not a browser-wide history index.
 (() => {
-  const SOURCE_WEIGHT = Object.freeze({url: 155, history: 95, bookmark: 90, online: 35});
+  const SOURCE_WEIGHT = Object.freeze({url: 155, search: 150, history: 95, bookmark: 90, online: 35});
   const normalize = value => String(value || '').normalize('NFKC').toLocaleLowerCase();
 
   function matchScore(candidate, query) {

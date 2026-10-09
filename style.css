@@ -674,3 +674,66 @@ button,input {font-family:inherit;}
   padding:0 10px;margin-bottom:12px;color:var(--fg);font-size:13px;cursor:pointer;}
 .suggest-pref-row input {accent-color:var(--accent);width:17px;height:17px;cursor:pointer;}
 @media(max-width:550px){.suggestion-item {min-height:43px;gap:7px;padding-inline:9px;}.suggestion-label{font-size:10px;}}
+
+
+/* v1.5.3 — Search suggestions share the engine picker's growing-capsule motion.
+   The 51px search input never moves: a single backplate extends downwards. */
+.search-combo { --suggestion-height:0px; isolation:isolate; }
+.search-combo::before {
+  content:""; position:absolute; z-index:0; inset:0 auto auto 0;
+  width:100%; height:calc(100% + var(--suggestion-height));
+  box-sizing:border-box; pointer-events:none;
+  border:1px solid var(--search-shell-edge); border-radius:25.5px;
+  background:var(--search-shell);
+  backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  box-shadow:none;
+  transition:height .30s cubic-bezier(.2,.75,.25,1),box-shadow .30s ease;
+}
+.search-combo.is-suggesting::before { box-shadow:0 17px 36px rgba(22,44,74,.15); }
+.search-combo .search-bar,
+.search-combo .search-bar:focus-within,
+.search-combo .search-bar:has(#query:focus) {
+  position:relative; z-index:2;
+  border-color:transparent; background:transparent; box-shadow:none;
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+.search-combo .search-suggestions {
+  position:absolute; left:0; right:0; top:calc(100% - 1px); z-index:1;
+  box-sizing:border-box; height:0; max-height:none;
+  padding:0 6px; margin:0;
+  border:0; border-radius:0 0 25px 25px;
+  background:transparent; color:var(--search-cell-fg); box-shadow:none;
+  overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain;
+  /* Content can overflow while the capsule animates; keep scrolling without a transient scrollbar. */
+  scrollbar-width:none;
+  pointer-events:none;
+  transition:height .30s cubic-bezier(.2,.75,.25,1);
+}
+.search-combo .search-suggestions::-webkit-scrollbar { display:none; width:0; height:0; }
+.search-combo.is-suggesting .search-suggestions { pointer-events:auto; }
+.search-combo .suggestion-item:first-child { margin-top:7px; }
+.search-combo .suggestion-item:last-child { margin-bottom:9px; }
+.search-combo .suggestion-item {
+  transform-origin:center top;
+  transition:background-color .15s ease;
+}
+/* A non-interactive overlay briefly fades out removed rows; real options stay semantic. */
+.search-combo .suggestion-ghost-layer {
+  position:absolute; top:calc(100% - 1px); left:0; right:0;
+  z-index:2; height:var(--suggestion-height); overflow:hidden; pointer-events:none;
+  transition:height .30s cubic-bezier(.2,.75,.25,1);
+}
+.search-combo .suggestion-ghost {
+  display:flex; align-items:center; width:calc(100% - 12px); min-height:42px;
+  position:absolute; left:6px; gap:11px; padding:7px 11px;
+  border:0; border-radius:11px; background:transparent;
+  color:var(--search-cell-fg); text-align:left; font-size:13px;
+  box-sizing:border-box;
+}
+@media(max-width:550px) {
+  .search-combo .suggestion-ghost {min-height:43px;gap:7px;padding-inline:9px;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .search-combo::before,.search-combo .search-suggestions,
+  .search-combo .suggestion-ghost-layer,.search-combo .suggestion-item { transition:none!important; animation:none!important; }
+}

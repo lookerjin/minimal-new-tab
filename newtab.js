@@ -46,7 +46,7 @@ function applyLocale(){
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el=>{el.placeholder=t(el.dataset.i18nPlaceholder)});
   query.placeholder=t('searchPlaceholder');
   query.setAttribute('aria-label',settings.locale==='en'?'Search query':'搜索内容');
-  searchSubmit.setAttribute('aria-label',settings.locale==='en'?'Search':'搜索');
+  syncSubmitState();
   document.querySelectorAll('[data-i18n-title]').forEach(el=>{el.title=t(el.dataset.i18nTitle)});
   for(const button of document.querySelectorAll('[data-locale]')){
     const current=button.dataset.locale===settings.locale;
@@ -100,9 +100,18 @@ function setEngineOpen(open, focusTarget=null){
   engineButton.setAttribute('aria-expanded',String(open));
   if(open){window.NewTabSuggest?.close();engineMenu.querySelector('[data-engine="'+settings.engine+'"]')?.setAttribute('tabindex','0');}
 }
-// Search submission is purely text-based; keep the arrow visible but disable empty queries.
-function syncSubmitState(){searchSubmit.disabled=!query.value.trim();}
-// Lazy-load the entire local suggestion pipeline on first nonempty input.
+// Resolve the default action independently of async suggestions or their ranking.
+function syncSubmitState(){
+  const text=query.value.trim();
+  searchSubmit.disabled=!text;
+  const action=text ? QueryAnalyzer.resolve(text,window.NewTabSuggest?.chosenDestination()) : null;
+  const label=action?.type==='navigate'
+    ? (settings.locale==='en'?'Visit URL':'访问网址')
+    : (settings.locale==='en'?'Search':'搜索');
+  searchSubmit.setAttribute('aria-label',label);
+  searchSubmit.title=label;
+}
+// URL classification is tiny and eager; suggestion providers remain lazy.
 // Parallel local module loads; the controller loads only after its dependencies are ready.
 let suggestionsLoading = false;
 function loadLocalScript(path) {
@@ -117,9 +126,11 @@ function loadLocalScript(path) {
 async function loadSuggestions() {
   if (suggestionsLoading || window.NewTabSuggest) return;
   suggestionsLoading = true;
+  const started = performance.now();
   try {
-    await Promise.all(['query-analyzer.js', 'frecency.js', 'candidate-pipeline.js'].map(loadLocalScript));
+    await Promise.all(['frecency.js', 'candidate-pipeline.js'].map(loadLocalScript));
     await loadLocalScript('suggestions.js');
+    performance.measure('minimal-new-tab-suggestions-load', {start:started, end:performance.now()});
   } catch (error) {
     suggestionsLoading = false;
     console.warn('Search suggestions unavailable:', error);
@@ -130,6 +141,7 @@ query.addEventListener('input', () => {
   if (query.value.trim() && !window.NewTabSuggest) loadSuggestions();
 });
 query.addEventListener('focus', () => { if (query.value.trim() && !window.NewTabSuggest) loadSuggestions(); });
+document.addEventListener('newtab-suggestion-selection-changed',syncSubmitState);
 syncSubmitState();
 
 function openDatabase() {
@@ -283,12 +295,13 @@ $('search-form').addEventListener('submit',(event)=>{
   const text=query.value.trim();
   if(!text)return;
   const destination=window.NewTabSuggest?.chosenDestination();
-  if(destination?.url){
-    window.NewTabSuggest?.recordNavigation(text,destination);
-    location.assign(destination.url);
+  const action=QueryAnalyzer.resolve(text,destination);
+  if(action.type==='navigate'){
+    window.NewTabSuggest?.recordNavigation(text,destination || {type:'url',text,url:action.url});
+    location.assign(action.url);
     return;
   }
-  const submitted=destination?.text||text;
+  const submitted=action.query;
   // Sync localStorage is intentionally written only when submitting, never while typing.
   try {
     const key='minimalSearchHistory';
