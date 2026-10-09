@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  publish:
+    needs: test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate tag, version and main ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || exit 1
+          git fetch origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo 'Release tag must refer to a commit already merged into main' >&2
+            exit 1
+          }
+          python scripts/package.py --version "$GITHUB_REF_NAME"
+          cd dist
+          sha256sum -c "minimal-new-tab-${GITHUB_REF_NAME}-edge.zip.sha256"
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/minimal-new-tab-${GITHUB_REF_NAME}-edge.zip" \
+            "dist/minimal-new-tab-${GITHUB_REF_NAME}-edge.zip.sha256" \
+            --verify-tag --generate-notes --title "$GITHUB_REF_NAME"

@@ -1,11 +1,12 @@
 """Regression tests for failed sync writes and superseded wallpaper selection."""
 from playwright.sync_api import sync_playwright
+from browser_runtime import launch_chromium
 from test_settings_controls import setup
 
 
 def test_failed_engine_write_restores_persisted_state():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(pw)
         page = browser.new_page()
         setup(page)
         page.evaluate("() => { chrome.storage.sync.set = async () => {throw Error('quota exceeded')}; }")
@@ -19,7 +20,7 @@ def test_failed_engine_write_restores_persisted_state():
 
 def test_failed_background_write_restores_mode_and_theme():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(pw)
         page = browser.new_page(color_scheme='light')
         setup(page)
         page.evaluate("() => { chrome.storage.sync.set = async () => {throw Error('quota exceeded')}; }")
@@ -33,7 +34,7 @@ def test_failed_background_write_restores_mode_and_theme():
 
 def test_cached_wallpaper_decode_cannot_supersede_later_solid_choice():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(pw)
         page = browser.new_page(color_scheme='light')
         setup(page)
         page.evaluate("""() => {
@@ -68,7 +69,7 @@ def test_cached_wallpaper_decode_cannot_supersede_later_solid_choice():
 
 def test_rapid_settings_writes_are_serial_and_own_echoes_do_not_revert_ui():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(pw)
         page = browser.new_page()
         setup(page)
         page.evaluate("""() => {
@@ -98,7 +99,7 @@ def test_rapid_settings_writes_are_serial_and_own_echoes_do_not_revert_ui():
 
 def test_failed_cached_photo_restores_previous_background():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(pw)
         page = browser.new_page(color_scheme='light')
         setup(page)
         page.locator('#open-settings').click()
@@ -125,7 +126,7 @@ def test_failed_cached_photo_restores_previous_background():
 
 def test_failed_local_photo_save_does_not_replace_cached_image():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(pw)
         page = browser.new_page(color_scheme='light')
         setup(page)
         page.evaluate("""() => {
@@ -147,7 +148,7 @@ def test_failed_local_photo_save_does_not_replace_cached_image():
 
 def test_canceled_upload_does_not_change_local_cache_after_delayed_idb_write():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(pw)
         page = browser.new_page(color_scheme='light')
         setup(page)
         page.evaluate("""() => {
@@ -174,7 +175,7 @@ def test_canceled_upload_does_not_change_local_cache_after_delayed_idb_write():
 
 def test_external_sync_changes_apply_only_when_local_writes_are_idle():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(pw)
         page = browser.new_page()
         setup(page)
         page.evaluate("""() => {

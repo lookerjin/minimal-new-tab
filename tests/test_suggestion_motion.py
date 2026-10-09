@@ -2,6 +2,7 @@
 import re
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from browser_runtime import launch_chromium
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,7 +54,7 @@ def geometry(page):
 
 def test_capsule_transition_and_dynamic_results():
     with sync_playwright() as pw:
-        browser=pw.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+        browser=launch_chromium(pw)
         page=browser.new_page(viewport={'width':1150,'height':800})
         errors=[]
         page.on('pageerror',lambda e: errors.append(str(e)))
@@ -100,7 +101,7 @@ def test_capsule_transition_and_dynamic_results():
 
 def test_reduced_motion_has_no_animated_transition():
     with sync_playwright() as pw:
-        browser=pw.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+        browser=launch_chromium(pw)
         page=browser.new_page(viewport={'width':400,'height':640},reduced_motion='reduce')
         build_page(page)
         q=page.locator('#query')
@@ -117,7 +118,7 @@ def test_reduced_motion_has_no_animated_transition():
 
 def test_rapid_typing_recovers_and_removed_rows_fade_without_clickable_duplicates():
     with sync_playwright() as pw:
-        browser=pw.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+        browser=launch_chromium(pw)
         page=browser.new_page(viewport={'width':420,'height':360})
         failures=[]
         page.on('pageerror',lambda e: failures.append(str(e)))
@@ -161,8 +162,7 @@ def test_rapid_typing_recovers_and_removed_rows_fade_without_clickable_duplicate
 def test_scrollbar_stays_hidden_during_resize_but_small_viewport_still_scrolls():
     """Transient overflow must not cause scrollbar flashes; real overflow remains scrollable."""
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True,
-            args=['--no-sandbox', '--disable-features=OverlayScrollbar'])
+        browser = launch_chromium(pw, args=['--no-sandbox', '--disable-features=OverlayScrollbar'])
         page = browser.new_page(viewport={'width': 1150, 'height': 800})
         build_page(page)
         q = page.locator('#query')

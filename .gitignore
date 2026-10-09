@@ -1,0 +1,12 @@
+# Generated release archives and checksums
+dist/
+
+# Python and test caches
+__pycache__/
+.pytest_cache/
+*.py[cod]
+
+# Editor / OS files
+.DS_Store
+.vscode/
+.idea/

@@ -1,5 +1,6 @@
 """v1.5.9: visual-only submit acknowledgment, without postponing navigation."""
 from playwright.sync_api import sync_playwright
+from browser_runtime import launch_chromium
 from test_suggestion_motion import build_page
 
 
@@ -26,7 +27,7 @@ def state(page):
 
 def test_search_submit_ack_and_delayed_orbit_without_navigation_wait():
     with sync_playwright() as p:
-        browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+        browser=launch_chromium(p)
         page=browser.new_page(viewport={'width':1200,'height':840})
         errors=[]
         page.on('pageerror',lambda e:errors.append(str(e)))
@@ -55,7 +56,7 @@ def test_search_submit_ack_and_delayed_orbit_without_navigation_wait():
 
 def test_url_direct_visit_shows_navigation_ring():
     with sync_playwright() as p:
-        browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+        browser=launch_chromium(p)
         page=browser.new_page(viewport={'width':1000,'height':750})
         build_page(page)
         q=page.locator('#query')
@@ -71,7 +72,7 @@ def test_url_direct_visit_shows_navigation_ring():
 
 def test_theme_reduced_motion_and_narrow_layout():
     with sync_playwright() as p:
-        browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+        browser=launch_chromium(p)
         page=browser.new_page(viewport={'width':390,'height':710},reduced_motion='reduce')
         build_page(page)
         page.evaluate("document.documentElement.dataset.theme='dark'")
@@ -97,7 +98,7 @@ def test_theme_reduced_motion_and_narrow_layout():
 
 def test_selected_engine_uses_ring_and_can_reset_on_page_restore():
     with sync_playwright() as p:
-        browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+        browser=launch_chromium(p)
         page=browser.new_page(viewport={'width':1100,'height':800})
         build_page(page)
         page.locator('#engine-button').click()
@@ -114,7 +115,7 @@ def test_selected_engine_uses_ring_and_can_reset_on_page_restore():
 
 def test_bilingual_url_placeholder_and_accessible_label():
     with sync_playwright() as p:
-        browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+        browser=launch_chromium(p)
         page=browser.new_page(viewport={'width':1200,'height':800})
         build_page(page)
         q=page.locator('#query')
@@ -132,7 +133,7 @@ def test_bilingual_url_placeholder_and_accessible_label():
 
 def test_bookmark_url_and_selected_search_both_show_ring():
     with sync_playwright() as p:
-        browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+        browser=launch_chromium(p)
         page=browser.new_page(viewport={'width':1100,'height':800})
         build_page(page)
         q=page.locator('#query')

@@ -1,5 +1,6 @@
 """Regression for dropdown stability during typing and backspace."""
 from playwright.sync_api import sync_playwright
+from browser_runtime import launch_chromium
 from test_suggestion_motion import build_page, geometry
 
 
@@ -10,7 +11,7 @@ def panel_target(page):
 
 def test_backspace_does_not_collapse_while_bookmark_provider_is_pending():
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(p)
         page = browser.new_page(viewport={'width': 1200, 'height': 850})
         build_page(page)
         q = page.locator('#query')
@@ -32,7 +33,7 @@ def test_backspace_does_not_collapse_while_bookmark_provider_is_pending():
 
 def test_height_shrinks_after_typing_settles_but_grows_immediately():
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(p)
         page = browser.new_page(viewport={'width': 1200, 'height': 850})
         build_page(page)
         q = page.locator('#query')
@@ -58,7 +59,7 @@ def test_height_shrinks_after_typing_settles_but_grows_immediately():
 
 def test_true_no_results_eventually_closes_and_escape_still_works():
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(p)
         page = browser.new_page(viewport={'width': 1200, 'height': 850})
         build_page(page)
         q = page.locator('#query')
@@ -80,7 +81,7 @@ def test_true_no_results_eventually_closes_and_escape_still_works():
 
 def test_late_online_results_do_not_cause_collapse_and_reopen():
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(p)
         page = browser.new_page(viewport={'width': 1200, 'height': 850})
         build_page(page)
         page.evaluate('''() => {
@@ -109,7 +110,7 @@ def test_late_online_results_do_not_cause_collapse_and_reopen():
 
 def test_continuous_backspace_never_restarts_expansion():
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(p)
         page = browser.new_page(viewport={'width': 1200, 'height': 850})
         build_page(page)
         q = page.locator('#query')

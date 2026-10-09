@@ -1,5 +1,6 @@
 """Mixed-source query snapshots must not reverse the search capsule's height mid-edit."""
 from playwright.sync_api import sync_playwright
+from browser_runtime import launch_chromium
 from test_suggestion_motion import build_page, geometry
 
 
@@ -22,7 +23,7 @@ def enable_delayed_online(page, wait=90):
 
 def test_mixed_sources_do_not_shrink_then_expand_during_backspace():
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(p)
         page = browser.new_page(viewport={'width': 1150, 'height': 850})
         build_page(page)
         enable_delayed_online(page)
@@ -44,7 +45,7 @@ def test_mixed_sources_do_not_shrink_then_expand_during_backspace():
 
 def test_backspace_burst_with_mixed_sources_keeps_capsule_height():
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(p)
         page = browser.new_page(viewport={'width': 1150, 'height': 850})
         build_page(page)
         enable_delayed_online(page)
@@ -68,7 +69,7 @@ def test_backspace_burst_with_mixed_sources_keeps_capsule_height():
 
 def test_mixed_provider_completion_preserves_keyboard_selection():
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(p)
         page = browser.new_page(viewport={'width': 1150, 'height': 850})
         build_page(page)
         enable_delayed_online(page)
@@ -87,7 +88,7 @@ def test_mixed_provider_completion_preserves_keyboard_selection():
 
 def test_reduced_motion_still_defers_intermediate_provider_shrink():
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(p)
         page = browser.new_page(viewport={'width': 1150, 'height': 850}, reduced_motion='reduce')
         build_page(page)
         enable_delayed_online(page)

@@ -4,6 +4,7 @@ The actual extension APIs are mocked; no external browser traffic is required.
 import re
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from browser_runtime import launch_chromium
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,7 +21,7 @@ def test_search_ui():
     html = re.sub(r'<script\s+src="[^"]+"\s*(?:defer)?\s*></script>', '', html)
     html = re.sub(r'<link rel="stylesheet"[^>]+>', '', html)
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(playwright)
         page = browser.new_page(viewport={'width': 1100, 'height': 850})
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
@@ -217,7 +218,7 @@ def test_lazy_bootstrap():
     html = re.sub(r'<link rel="stylesheet"[^>]+>', '', html)
     html = html.replace('<head>', '<head><base href="https://mock.test/">')
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(playwright)
         page = browser.new_page()
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))

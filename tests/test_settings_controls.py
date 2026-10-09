@@ -2,6 +2,7 @@
 import re
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from browser_runtime import launch_chromium
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,7 +38,7 @@ def setup(page):
 
 def test_engine_order_and_selection_stays_functional():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(pw)
         page = browser.new_page(viewport={'width':1100,'height':850})
         setup(page)
         assert page.locator('#engine-menu [data-engine]').evaluate_all('(buttons) => buttons.map(b=>b.dataset.engine)') == ['google','bing','baidu']
@@ -54,7 +55,7 @@ def test_engine_order_and_selection_stays_functional():
 
 def test_settings_controls_keep_native_keyboard_state_and_motion_support():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(pw)
         page = browser.new_page(viewport={'width':700,'height':720})
         setup(page)
         page.locator('#open-settings').click()
@@ -100,7 +101,7 @@ def test_settings_controls_keep_native_keyboard_state_and_motion_support():
 
 def test_reduced_motion_settings_controls_do_not_animate():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+        browser = launch_chromium(pw)
         page = browser.new_page(viewport={'width':400,'height':640}, reduced_motion='reduce')
         setup(page)
         for selector in ['.suggest-toggle-track', '.suggest-toggle-thumb', '.mode-selection']:
