@@ -8,6 +8,7 @@
 <script src="boot.js"></script>
 <link rel="stylesheet" href="style.css">
 <script src="site-icons.js" defer></script>
+<script src="query-analyzer.js" defer></script>
 <script src="newtab.js" defer></script>
 <script src="bookmarks.js" defer></script>
 </head>
@@ -52,14 +53,14 @@
           </button>
           <div id="engine-menu" class="engine-menu" role="menu" aria-hidden="true" inert>
             <button type="button" role="menuitemradio" aria-checked="true" data-engine="google"><img src="assets/google.ico" alt=""><span>Google</span><svg class="selected-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5 10 17l8.5-9"/></svg></button>
-            <button type="button" role="menuitemradio" aria-checked="false" data-engine="baidu"><img src="assets/baidu.ico" alt=""><span>Baidu</span><svg class="selected-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5 10 17l8.5-9"/></svg></button>
             <button type="button" role="menuitemradio" aria-checked="false" data-engine="bing"><img id="bing-menu-icon" src="assets/bing.ico" alt=""><span>Bing</span><svg class="selected-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5 10 17l8.5-9"/></svg></button>
+            <button type="button" role="menuitemradio" aria-checked="false" data-engine="baidu"><img src="assets/baidu.ico" alt=""><span>Baidu</span><svg class="selected-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5 10 17l8.5-9"/></svg></button>
           </div>
         </div>
-        <input id="query" type="search" autocomplete="off" spellcheck="false" placeholder="搜索..." data-i18n-placeholder="searchPlaceholder" aria-label="搜索内容" aria-autocomplete="list" aria-expanded="false" aria-controls="search-suggestions">
+        <input id="query" type="search" autocomplete="off" spellcheck="false" placeholder="搜索或输入 Web 地址" data-i18n-placeholder="searchPlaceholder" aria-label="搜索或输入 Web 地址" aria-autocomplete="list" aria-expanded="false" aria-controls="search-suggestions">
         <button class="search-round-button search-submit" type="submit" aria-label="搜索" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
       </form>
-      <div id="search-suggestions" class="search-suggestions" role="listbox" aria-label="搜索建议" hidden></div>
+      <div id="search-suggestions" class="search-suggestions" role="listbox" aria-label="搜索建议" aria-hidden="true" hidden></div>
     </div>
   </section>
 </main>
@@ -71,14 +72,14 @@
 <aside id="settings" class="glass-panel settings-panel" aria-hidden="true" aria-label="设置">
 <header class="settings-heading"><h2 data-i18n="settings">设置</h2><button id="close-settings" type="button" class="subtle-button" aria-label="关闭设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12m0-12L6 18"/></svg></button></header>
 <div class="language-row"><span class="language-label"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span class="row-name" data-i18n="language">语言</span></span><div id="locale-segmented" class="segmented" data-selected="zh" role="group" aria-label="界面语言"><span class="segment-thumb" aria-hidden="true"></span><button type="button" data-locale="zh" class="active" aria-pressed="true">中</button><button type="button" data-locale="en" aria-pressed="false">EN</button></div></div>
-<label class="suggest-pref-row"><span data-i18n="onlineSuggestions">在线搜索建议</span><input id="online-suggestions" type="checkbox" checked></label>
+<label class="suggest-pref-row"><span data-i18n="onlineSuggestions">在线搜索建议</span><input id="online-suggestions" type="checkbox" checked><span class="suggest-toggle-track" aria-hidden="true"><span class="suggest-toggle-thumb"></span></span></label>
 <fieldset id="background-options" class="mode-group"><legend data-i18n="background">背景</legend>
-<label class="mode-card"><input type="radio" name="mode" value="auto"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="3.4"/><path d="M7 1.5v1M7 11v1.5M1.5 7h1M11.5 7h1M3.1 3.1l.8.8M10.1 10.1l.8.8M3.1 10.9l.8-.8"/><path d="M16 4.5a7.5 7.5 0 1 0 3.6 14.4A8.5 8.5 0 0 1 16 4.5Z"/></svg></span><span data-i18n="auto">自动跟随系统</span></label>
-<label class="mode-card"><input type="radio" name="mode" value="white"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span data-i18n="white">纯白</span></label>
-<label class="mode-card"><input type="radio" name="mode" value="black"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.4 15.3A8.7 8.7 0 0 1 8.7 3.6 8.8 8.8 0 1 0 20.4 15.3Z"/></svg></span><span data-i18n="black">纯黑</span></label>
-<label class="mode-card"><input type="radio" name="mode" value="bing"><span class="mode-icon bing-brand-icon" aria-hidden="true"><img id="bing-wallpaper-icon" src="assets/bing.ico" alt=""></span><span data-i18n="daily">必应每日壁纸</span></label>
-<label class="mode-card"><input type="radio" name="mode" value="local"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.3" cy="9" r="1.4"/><path d="m4 17 5-5 3.4 3.4 3.1-3.1L21 18"/></svg></span><span data-i18n="local">本地图片</span></label>
-<label class="mode-card"><input type="radio" name="mode" value="remote"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 13.8a4.4 4.4 0 0 0 6.4.2l2.5-2.5A4.4 4.4 0 0 0 12.7 5l-1.4 1.4"/><path d="M14 10.2a4.4 4.4 0 0 0-6.4-.2l-2.5 2.5A4.4 4.4 0 0 0 11.3 19l1.4-1.4"/></svg></span><span data-i18n="remote">图片链接</span></label>
+<label class="mode-card"><input type="radio" name="mode" value="auto"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="3.4"/><path d="M7 1.5v1M7 11v1.5M1.5 7h1M11.5 7h1M3.1 3.1l.8.8M10.1 10.1l.8.8M3.1 10.9l.8-.8"/><path d="M16 4.5a7.5 7.5 0 1 0 3.6 14.4A8.5 8.5 0 0 1 16 4.5Z"/></svg></span><span data-i18n="auto">自动跟随系统</span><span class="mode-selection" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg></span></label>
+<label class="mode-card"><input type="radio" name="mode" value="white"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span data-i18n="white">纯白</span><span class="mode-selection" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg></span></label>
+<label class="mode-card"><input type="radio" name="mode" value="black"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.4 15.3A8.7 8.7 0 0 1 8.7 3.6 8.8 8.8 0 1 0 20.4 15.3Z"/></svg></span><span data-i18n="black">纯黑</span><span class="mode-selection" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg></span></label>
+<label class="mode-card"><input type="radio" name="mode" value="bing"><span class="mode-icon bing-brand-icon" aria-hidden="true"><img id="bing-wallpaper-icon" src="assets/bing.ico" alt=""></span><span data-i18n="daily">必应每日壁纸</span><span class="mode-selection" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg></span></label>
+<label class="mode-card"><input type="radio" name="mode" value="local"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.3" cy="9" r="1.4"/><path d="m4 17 5-5 3.4 3.4 3.1-3.1L21 18"/></svg></span><span data-i18n="local">本地图片</span><span class="mode-selection" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg></span></label>
+<label class="mode-card"><input type="radio" name="mode" value="remote"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 13.8a4.4 4.4 0 0 0 6.4.2l2.5-2.5A4.4 4.4 0 0 0 12.7 5l-1.4 1.4"/><path d="M14 10.2a4.4 4.4 0 0 0-6.4-.2l-2.5 2.5A4.4 4.4 0 0 0 11.3 19l1.4-1.4"/></svg></span><span data-i18n="remote">图片链接</span><span class="mode-selection" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg></span></label>
 </fieldset>
 <div id="local-control" class="extra-control" hidden><button id="choose-image" class="action-button" type="button" data-i18n="chooseImage">选择本机图片</button><input id="image-file" type="file" accept="image/png,image/jpeg,image/webp,image/avif,image/gif" hidden><small data-i18n="localHelp">仅保存在此设备上</small></div>
 <div id="remote-control" class="extra-control" hidden><label for="image-url" data-i18n="imageLink">HTTPS 图片直链</label><input id="image-url" type="url" placeholder="https://example.com/wallpaper.jpg" spellcheck="false"><button id="save-url" class="action-button" type="button" data-i18n="saveImage">保存并缓存</button><small data-i18n="remoteHelp">链接会同步，图片保存在本地</small></div>

@@ -12,8 +12,12 @@ const $=(id)=>document.getElementById(id);
 const query=$('query'), picture=$('wallpaper'), credit=$('credit'), panel=$('settings'), status=$('status');
 const engineControl=$('engine-control'), engineMenu=$('engine-menu'), engineButton=$('engine-button');
 const searchSubmit=document.querySelector('.search-submit');
+const searchCombo=document.querySelector('.search-combo');
 const darkMode=matchMedia('(prefers-color-scheme: dark)');
-let settings={...DEFAULTS},wallpaperUrl=null,modeGeneration=0;
+let settings={...DEFAULTS},persistedSettings={...DEFAULTS},wallpaperUrl=null,modeGeneration=0;
+// Serialize sync writes; earlier completions must never overwrite a newer choice.
+let settingsWriteQueue=Promise.resolve(),settingsRevision=0,committedRevision=0,pendingLocalWrites=0;
+const ownSettingsWrites=[]; // Short-lived fingerprints of our own onChanged echoes.
 let pendingMode=null; // A local/remote choice is not applied until a valid image is ready.
 let selectionRequest=0;
 
@@ -21,8 +25,8 @@ let selectionRequest=0;
 // Bookmark sites continue to use Edge's own cached favicons in bookmarks.js.
 
 const STRINGS={
- zh:{bookmarks:'书签',folders:'文件夹',back:'返回上一级',closeBookmarks:'收起侧栏',focusBookmarkSearch:'搜索书签',bookmarkPlaceholder:'搜索“书签”',bookmarkHint:'点击文件夹进入',searchPlaceholder:'搜索...',settings:'设置',language:'语言',background:'背景',auto:'自动跟随系统',white:'纯白',black:'纯黑',local:'本地图片',daily:'必应每日壁纸',remote:'图片链接',chooseImage:'选择本机图片',localHelp:'仅保存在此设备上',imageLink:'HTTPS 图片直链',saveImage:'保存并缓存',remoteHelp:'链接会同步，图片保存在本地',noBookmarks:'暂无书签',noResults:'没有匹配的书签',loadingBookmarks:'正在读取本地书签...',bookmarkError:'读取书签失败，请检查扩展权限',onlineSuggestions:'在线搜索建议'},
- en:{bookmarks:'Bookmarks',folders:'Folders',back:'Back',closeBookmarks:'Hide sidebar',focusBookmarkSearch:'Search bookmarks',bookmarkPlaceholder:'Search Bookmarks',searchPlaceholder:'Search...',settings:'Settings',language:'Language',background:'Background',auto:'Follow system',white:'White',black:'Black',local:'Local image',daily:'Bing daily wallpaper',remote:'Image URL',chooseImage:'Choose local image',localHelp:'Saved only on this device',imageLink:'HTTPS image URL',saveImage:'Save and cache',remoteHelp:'The URL syncs; the image stays local',noBookmarks:'No bookmarks',noResults:'No matching bookmarks',loadingBookmarks:'Reading local bookmarks...',bookmarkError:'Could not read bookmarks; check permissions',onlineSuggestions:'Online suggestions'}
+ zh:{bookmarks:'书签',folders:'文件夹',back:'返回上一级',closeBookmarks:'收起侧栏',bookmarkPlaceholder:'搜索“书签”',searchPlaceholder:'搜索或输入 Web 地址',settings:'设置',language:'语言',background:'背景',auto:'自动跟随系统',white:'纯白',black:'纯黑',local:'本地图片',daily:'必应每日壁纸',remote:'图片链接',chooseImage:'选择本机图片',localHelp:'仅保存在此设备上',imageLink:'HTTPS 图片直链',saveImage:'保存并缓存',remoteHelp:'链接会同步，图片保存在本地',noBookmarks:'暂无书签',noResults:'没有匹配的书签',loadingBookmarks:'正在读取本地书签...',bookmarkError:'读取书签失败，请检查扩展权限',onlineSuggestions:'在线搜索建议'},
+ en:{bookmarks:'Bookmarks',folders:'Folders',back:'Back',closeBookmarks:'Hide sidebar',bookmarkPlaceholder:'Search Bookmarks',searchPlaceholder:'Search or enter a web address',settings:'Settings',language:'Language',background:'Background',auto:'Follow system',white:'White',black:'Black',local:'Local image',daily:'Bing daily wallpaper',remote:'Image URL',chooseImage:'Choose local image',localHelp:'Saved only on this device',imageLink:'HTTPS image URL',saveImage:'Save and cache',remoteHelp:'The URL syncs; the image stays local',noBookmarks:'No bookmarks',noResults:'No matching bookmarks',loadingBookmarks:'Reading local bookmarks...',bookmarkError:'Could not read bookmarks; check permissions',onlineSuggestions:'Online suggestions'}
 };
 function t(key){return STRINGS[settings.locale]?.[key] || STRINGS.zh[key] || key}
 function setStatus(message='',error=false){status.textContent=message;status.classList.toggle('error',error)}
@@ -45,9 +49,8 @@ function applyLocale(){
   document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=t(el.dataset.i18n)});
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el=>{el.placeholder=t(el.dataset.i18nPlaceholder)});
   query.placeholder=t('searchPlaceholder');
-  query.setAttribute('aria-label',settings.locale==='en'?'Search query':'搜索内容');
-  searchSubmit.setAttribute('aria-label',settings.locale==='en'?'Search':'搜索');
-  document.querySelectorAll('[data-i18n-title]').forEach(el=>{el.title=t(el.dataset.i18nTitle)});
+  query.setAttribute('aria-label',t('searchPlaceholder'));
+  syncSubmitState();
   for(const button of document.querySelectorAll('[data-locale]')){
     const current=button.dataset.locale===settings.locale;
     button.classList.toggle('active',current);button.setAttribute('aria-pressed',String(current));
@@ -75,12 +78,45 @@ function applyModeControls(){
   $('remote-control').hidden=selected!=='remote';
   if(document.activeElement!==$('image-url'))$('image-url').value=settings.remoteUrl;
 }
+function sameSettings(a,b){
+  return Object.keys(DEFAULTS).every(key=>a[key]===b[key]);
+}
 async function saveSettings(patch){
-  settings=normalize({...settings,...patch});applySettingsToControls();
-  await chrome.storage.sync.set({newTabPrefs:settings});
+  const next=normalize({...settings,...patch});
+  const revision=++settingsRevision;
+  ++pendingLocalWrites;
+  settings=next;
+  applySettingsToControls();
+  // Queue writes in user-action order even if an earlier write is still pending.
+  const write=settingsWriteQueue.catch(()=>{}).then(async()=>{
+    const ownWrite={value:next,expires:Date.now()+5000};
+    ownSettingsWrites.push(ownWrite);
+    if(ownSettingsWrites.length>64)ownSettingsWrites.shift();
+    try{
+      await chrome.storage.sync.set({newTabPrefs:next});
+      persistedSettings=next;
+      committedRevision=revision;
+    }catch(error){
+      const index=ownSettingsWrites.indexOf(ownWrite);
+      if(index!==-1)ownSettingsWrites.splice(index,1);
+      throw error;
+    }
+  });
+  settingsWriteQueue=write;
+  try{await write;}
+  catch(error){
+    // A failed older request must not undo an even newer user selection.
+    if(revision===settingsRevision){
+      settings=persistedSettings;
+      applySettingsToControls();
+    }
+    throw error;
+  }finally{
+    --pendingLocalWrites;
+  }
 }
 function setPanelOpen(open){
-  if(!open && pendingMode){++selectionRequest;pendingMode=null;applyModeControls();setStatus();}
+  if(!open && pendingMode){++selectionRequest;++modeGeneration;pendingMode=null;applyModeControls();setStatus();}
   panel.classList.toggle('is-open',open);panel.setAttribute('aria-hidden',String(!open));
   $('open-settings').setAttribute('aria-expanded',String(open));
   if(open){setEngineOpen(false);window.NewTabSuggest?.close();}
@@ -100,24 +136,63 @@ function setEngineOpen(open, focusTarget=null){
   engineButton.setAttribute('aria-expanded',String(open));
   if(open){window.NewTabSuggest?.close();engineMenu.querySelector('[data-engine="'+settings.engine+'"]')?.setAttribute('tabindex','0');}
 }
-// Search submission is purely text-based; keep the arrow visible but disable empty queries.
-function syncSubmitState(){searchSubmit.disabled=!query.value.trim();}
-// The suggestions code, bookmark queries and all network work are absent from first paint.
+// Resolve the default action independently of async suggestions or their ranking.
+function syncSubmitState(){
+  const text=query.value.trim();
+  searchSubmit.disabled=!text;
+  const action=text ? QueryAnalyzer.resolve(text,window.NewTabSuggest?.chosenDestination()) : null;
+  const label=action?.type==='navigate'
+    ? (settings.locale==='en'?'Visit URL':'访问网址')
+    : (settings.locale==='en'?'Search':'搜索');
+  searchSubmit.setAttribute('aria-label',label);
+  searchSubmit.title=label;
+}
+// Navigation feedback is visual only: never wait for a frame or animation before assigning.
+// The left capsule ring acknowledges all outgoing navigation, including direct URLs.
+function clearSubmitFeedback(){
+  searchCombo.classList.remove('is-submitting');
+  engineControl.classList.remove('is-submitting');
+}
+function showSubmitFeedback(){
+  window.NewTabSuggest?.close(); // Invalidates pending suggestions before leaving the page.
+  setEngineOpen(false);
+  searchCombo.classList.add('is-submitting');
+  engineControl.classList.add('is-submitting');
+}
+window.addEventListener('pageshow',clearSubmitFeedback); // Back/forward cache restores.
+query.addEventListener('input',clearSubmitFeedback); // Navigation blocked/cancelled: editable again.
+
+// URL classification is tiny and eager; suggestion providers remain lazy.
+// Parallel local module loads; the controller loads only after its dependencies are ready.
 let suggestionsLoading = false;
-function loadSuggestions() {
+function loadLocalScript(path) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = path;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error(`Could not load ${path}`));
+    document.head.append(script);
+  });
+}
+async function loadSuggestions() {
   if (suggestionsLoading || window.NewTabSuggest) return;
   suggestionsLoading = true;
-  const script = document.createElement('script');
-  script.src = 'suggestions.js';
-  script.async = true;
-  script.onerror = () => { suggestionsLoading = false; };
-  document.head.append(script);
+  const started = performance.now();
+  try {
+    await Promise.all(['frecency.js', 'candidate-pipeline.js'].map(loadLocalScript));
+    await loadLocalScript('suggestions.js');
+    performance.measure('minimal-new-tab-suggestions-load', {start:started, end:performance.now()});
+  } catch (error) {
+    suggestionsLoading = false;
+    console.warn('Search suggestions unavailable:', error);
+  }
 }
 query.addEventListener('input', () => {
   syncSubmitState();
   if (query.value.trim() && !window.NewTabSuggest) loadSuggestions();
 });
 query.addEventListener('focus', () => { if (query.value.trim() && !window.NewTabSuggest) loadSuggestions(); });
+document.addEventListener('newtab-suggestion-selection-changed',syncSubmitState);
 syncSubmitState();
 
 function openDatabase() {
@@ -148,6 +223,20 @@ async function dbPut(key, value) {
     tx.onabort = () => { db.close(); reject(tx.error); };
   });
 }
+async function dbDelete(key) {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('images', 'readwrite');
+    tx.objectStore('images').delete(key);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+    tx.onabort = () => { db.close(); reject(tx.error); };
+  });
+}
+async function restoreCache(key, oldValue) {
+  if(oldValue===undefined)await dbDelete(key);
+  else await dbPut(key,oldValue);
+}
 function showSolidBackground() {
   picture.classList.remove('ready');
   picture.removeAttribute('src');
@@ -157,7 +246,7 @@ function showSolidBackground() {
   wallpaperUrl = null;
   applyTheme();
 }
-async function displayImage(blob, token, attribution = '') {
+async function displayImage(blob, token, attribution = '', keepPrevious = false) {
   if (!(blob instanceof Blob) || !blob.type.startsWith('image/')) return false;
   const nextUrl = URL.createObjectURL(blob);
   const nextImage = new Image();
@@ -172,7 +261,7 @@ async function displayImage(blob, token, attribution = '') {
     applyTheme();
     credit.textContent = attribution;
     credit.hidden = !attribution;
-    if (previous) URL.revokeObjectURL(previous);
+    if (previous && !keepPrevious) URL.revokeObjectURL(previous);
     return true;
   } catch (e) { URL.revokeObjectURL(nextUrl); throw e; }
 }
@@ -271,8 +360,14 @@ $('search-form').addEventListener('submit',(event)=>{
   const text=query.value.trim();
   if(!text)return;
   const destination=window.NewTabSuggest?.chosenDestination();
-  if(destination?.url){location.assign(destination.url);return;}
-  const submitted=destination?.text||text;
+  const action=QueryAnalyzer.resolve(text,destination);
+  if(action.type==='navigate'){
+    window.NewTabSuggest?.recordNavigation(text,destination || {type:'url',text,url:action.url});
+    showSubmitFeedback();
+    location.assign(action.url);
+    return;
+  }
+  const submitted=action.query;
   // Sync localStorage is intentionally written only when submitting, never while typing.
   try {
     const key='minimalSearchHistory';
@@ -280,7 +375,8 @@ $('search-form').addEventListener('submit',(event)=>{
     const recent=Array.isArray(old)?old.filter(v=>typeof v==='string'&&v!==submitted):[];
     localStorage.setItem(key,JSON.stringify([submitted,...recent].slice(0,30)));
   } catch(_){}
-  window.NewTabSuggest?.recordSearch(submitted);
+  window.NewTabSuggest?.recordSearch(submitted,text,destination);
+  showSubmitFeedback();
   location.assign(ENGINE_META[settings.engine].url+encodeURIComponent(submitted));
 });
 engineButton.addEventListener('click',()=>{setPanelOpen(false);setEngineOpen(!engineMenu.classList.contains('is-open'))});
@@ -331,7 +427,9 @@ document.addEventListener('keydown',(event)=>{
 for(const radio of document.querySelectorAll('input[name="mode"]')){
   radio.addEventListener('change',async()=>{
     if(!radio.checked)return;
-    ++selectionRequest;
+    const request=++selectionRequest;
+    // Invalidate an image that is still decoding *before* waiting for sync storage.
+    ++modeGeneration;
     if(radio.value==='local'||radio.value==='remote'){
       pendingMode=radio.value;
       applyModeControls();
@@ -340,77 +438,152 @@ for(const radio of document.querySelectorAll('input[name="mode"]')){
         : '选择图片并保存后才切换背景，当前背景保持不变。');
       // Existing cached wallpapers can be re-selected without re-uploading.
       // If no matching cache exists, the choice stays pending and the background stays put.
-      const request=selectionRequest;
       try{
         const cached=await dbGet(radio.value);
         if(request!==selectionRequest)return;
         const blob=radio.value==='local' ? cached :
           (cached?.url===settings.remoteUrl ? cached.blob : null);
         if(blob){
-          await commitPhoto(radio.value,blob);
-          setStatus('');
+          if(await commitPhoto(radio.value,blob,{},request) && request===selectionRequest)setStatus('');
         }
       }catch(e){if(request===selectionRequest)console.warn('Cached wallpaper unavailable:',e)}
       return;
     }
     pendingMode=null;
-    try{await saveSettings({mode:radio.value});await renderBackground()}
-    catch(e){setStatus('Failed to save background settings.',true);console.warn(e)}
+    try{
+      await saveSettings({mode:radio.value});
+      if(request===selectionRequest)await renderBackground();
+    }catch(e){
+      if(request===selectionRequest){await renderBackground();setStatus('Failed to save background settings.',true)}
+      console.warn(e);
+    }
   });
 }
-async function commitPhoto(mode, blob, extra={}){
-  // Show a decoded image before switching the theme to prevent a black flash.
+async function commitPhoto(mode, blob, extra={}, request=selectionRequest){
+  if(request!==selectionRequest)return false;
+  // Keep the previous visible image alive until persistence succeeds.
+  const previousUrl=wallpaperUrl;
+  const previousReady=picture.classList.contains('ready');
+  const previousCredit=credit.textContent;
   const token=++modeGeneration;
-  const displayed=await displayImage(blob,token);
-  if(!displayed)throw new Error('Cannot decode image');
+  const displayed=await displayImage(blob,token,'',true);
+  if(!displayed || request!==selectionRequest)return false;
   pendingMode=null;
-  await saveSettings({mode,...extra});
-  applyModeControls();
+  try{
+    await saveSettings({mode,...extra});
+    // Persistence can succeed just as a newer UI choice arrives. The cache
+    // must remain committed until that newer choice is saved as well.
+    return true;
+  }catch(error){
+    if(request===selectionRequest){
+      if(wallpaperUrl && wallpaperUrl!==previousUrl)URL.revokeObjectURL(wallpaperUrl);
+      wallpaperUrl=previousUrl;
+      if(previousReady && previousUrl){
+        picture.src=previousUrl;
+        picture.classList.add('ready');
+      }else{
+        picture.classList.remove('ready');
+        picture.removeAttribute('src');
+      }
+      credit.textContent=previousCredit;
+      credit.hidden=!previousCredit;
+      applyTheme();
+    }
+    throw error;
+  }finally{
+    // Keep the restored URL, otherwise release the old photo after the swap.
+    if(previousUrl && previousUrl!==wallpaperUrl)URL.revokeObjectURL(previousUrl);
+  }
 }
 
+// IndexedDB and sync storage are separate transactions. Serialize new photo
+// commits so a canceled upload can restore its cache before another starts.
+let photoCacheQueue=Promise.resolve();
+function saveNewPhoto(mode, blob, extra, request, cacheValue){
+  const work=photoCacheQueue.catch(()=>{}).then(async()=>{
+    if(request!==selectionRequest)return false;
+    const previous=await dbGet(mode);
+    if(request!==selectionRequest)return false;
+    await dbPut(mode,cacheValue);
+    let accepted=false;
+    try{
+      if(request===selectionRequest){
+        accepted=await commitPhoto(mode,blob,extra,request);
+      }
+      return accepted;
+    }finally{
+      if(!accepted){
+        try{await restoreCache(mode,previous)}
+        catch(error){console.warn('Could not restore cached image:',error)}
+      }
+    }
+  });
+  photoCacheQueue=work.catch(()=>{});
+  return work;
+}
 $('choose-image').addEventListener('click',()=>$('image-file').click());
 $('image-file').addEventListener('change',async()=>{
   const file=$('image-file').files?.[0];$('image-file').value='';if(!file)return;
   if(!file.type.startsWith('image/')||file.size>maxImageSize){setStatus('Choose an image under 20MB.',true);return}
   const request=++selectionRequest;
+  ++modeGeneration; // A previous upload may still be decoding its preview.
   try{
     // Decode once before touching the saved background. A failed image is not committed.
     const testUrl=URL.createObjectURL(file);
     try{const img=new Image();img.src=testUrl;await img.decode()}finally{URL.revokeObjectURL(testUrl)}
     if(request!==selectionRequest)return;
-    await dbPut('local',file);
-    if(request!==selectionRequest)return;
-    await commitPhoto('local',file);
-    setStatus('Saved to this device.');
+    if(await saveNewPhoto('local',file,{},request,file) && request===selectionRequest)setStatus('Saved to this device.');
+  }catch(e){
+    if(request===selectionRequest)setStatus('Could not save image.',true);
+    console.warn(e);
   }
-  catch(e){setStatus('Could not save image.',true);console.warn(e)}
 });
 $('save-url').addEventListener('click',async()=>{
   let url;try{url=validateRemoteURL($('image-url').value)}catch(e){setStatus(e.message,true);return}
   const request=++selectionRequest;
+  ++modeGeneration;
   try{
     const allowed=await chrome.permissions.request({origins:[`${url.origin}/*`]});
-    if(!allowed){setStatus('Image domain access denied.',true);return}
+    if(!allowed){if(request===selectionRequest)setStatus('Image domain access denied.',true);return}
+    if(request!==selectionRequest)return;
     setStatus('Downloading image...');const blob=await downloadImage(url.href);
     const testUrl=URL.createObjectURL(blob);
     try{const img=new Image();img.src=testUrl;await img.decode()}finally{URL.revokeObjectURL(testUrl)}
     if(request!==selectionRequest)return;
-    await dbPut('remote',{url:url.href,blob});
-    if(request!==selectionRequest)return;
-    await commitPhoto('remote',blob,{remoteUrl:url.href});
-    setStatus('Image cached on this device.');
-  }catch(e){setStatus('Could not download this HTTPS image.',true);console.warn(e)}
+    if(await saveNewPhoto('remote',blob,{remoteUrl:url.href},request,{url:url.href,blob}) && request===selectionRequest){
+      setStatus('Image cached on this device.');
+    }
+  }catch(e){
+    if(request===selectionRequest)setStatus('Could not download this HTTPS image.',true);
+    console.warn(e);
+  }
 });
 darkMode.addEventListener('change',()=>applyTheme());
 chrome.storage.onChanged.addListener((changes,area)=>{
   if(area==='sync'&&changes.newTabPrefs){
     const next=normalize(changes.newTabPrefs.newValue||DEFAULTS);
+    const now=Date.now();
+    for(let i=ownSettingsWrites.length-1;i>=0;i--){
+      if(ownSettingsWrites[i].expires<now)ownSettingsWrites.splice(i,1);
+    }
+    if(ownSettingsWrites.some(own=>sameSettings(own.value,next)))return;
+    // Local user input wins while its ordered writes are still outstanding.
+    if(pendingLocalWrites)return;
+    ++settingsRevision;
+    ++selectionRequest;
+    ++modeGeneration;
+    persistedSettings=next;
     const changeBackground=next.mode!==settings.mode||next.remoteUrl!==settings.remoteUrl;
-    settings=next;applySettingsToControls();if(changeBackground)void renderBackground();
+    settings=next;pendingMode=null;
+    applySettingsToControls();if(changeBackground)void renderBackground();
   }
 });
 (async()=>{
-  try{const saved=await chrome.storage.sync.get('newTabPrefs');settings=normalize(saved.newTabPrefs||DEFAULTS)}
-  catch(e){console.warn('Settings sync unavailable:',e)}
+  try{
+    const saved=await chrome.storage.sync.get('newTabPrefs');
+    const initial=normalize(saved.newTabPrefs||DEFAULTS);
+    if(committedRevision===0)persistedSettings=initial;
+    if(settingsRevision===0)settings=initial;
+  }catch(e){console.warn('Settings sync unavailable:',e)}
   applySettingsToControls();await renderBackground();
 })();

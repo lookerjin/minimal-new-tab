@@ -1,203 +1,545 @@
 'use strict';
-// Loaded on the first nonempty search input, never during new-tab startup.
+// All providers are lazy: this file is loaded only after the first nonempty query.
 (() => {
   const input = document.getElementById('query');
   const list = document.getElementById('search-suggestions');
   const form = document.getElementById('search-form');
-  const engineButton = document.getElementById('engine-button');
+  const combo = document.querySelector('.search-combo');
+  const ghostLayer = document.createElement('div');
+  ghostLayer.className = 'suggestion-ghost-layer';
+  ghostLayer.setAttribute('aria-hidden', 'true');
+  ghostLayer.inert = true;
+  combo.append(ghostLayer);
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const PANEL_DURATION = 300; // Matches the search-engine capsule expansion.
+  const SHRINK_IDLE_MS = 180; // Delay shrinking while the user is still typing.
+  let hideTimer = null;
+  let shrinkTimer = null;
+  let panelHeight = 0;
+  let lastEditAt = 0;
+  let providersSettled = true; // Only the final merged candidate set may shrink the shell.
   const MAX_ITEMS = 6;
+  const MAX_BOOKMARK_CANDIDATES = 80;
+  const MAX_DIAGNOSTIC_SAMPLES = 40;
   const REMOTE_DELAY = 240;
   const REMOTE_TIMEOUT = 950;
   const CACHE_TTL = 180000;
   const onlineCache = new Map();
   const failedUntil = new Map();
-  const provider = {
+  const endpoints = {
     google: (q, locale) => `https://suggestqueries.google.com/complete/search?client=firefox&hl=${locale === 'en' ? 'en' : 'zh-CN'}&q=${encodeURIComponent(q)}`,
     baidu: q => `https://www.baidu.com/sugrec?prod=pc&ie=utf-8&json=1&wd=${encodeURIComponent(q)}`,
     bing: (q, locale) => `https://api.bing.com/osjson.aspx?query=${encodeURIComponent(q)}&language=${locale === 'en' ? 'en-US' : 'zh-CN'}`
   };
-  let version = 0, localTimer = null, remoteTimer = null, controller = null;
-  let composing = false, dismissed = false, items = [], selected = -1;
-  let currentText = '', historyResults = [], bookmarkResults = [], onlineResults = [];
+  const labels = {
+    zh: {url:'访问网址', history:'最近搜索', bookmark:'书签', online:'搜索建议'},
+    en: {url:'Visit URL', history:'Recent', bookmark:'Bookmark', online:'Suggest'}
+  };
+  const normalize = value => String(value || '').normalize('NFKC').toLocaleLowerCase();
+  const keyFor = item => item.url ? `url:${item.url}`
+    : `${item.type === 'search' ? 'search' : 'text'}:${normalize(item.text)}`;
+  let generation = 0;
+  let activeRequest = null;
+  let composing = false;
+  let dismissed = false;
+  let items = [];
+  let selected = -1;
+  let selectedKey = null;
+  let currentText = '';
   let history = [];
+  let usage = [];
+  // Timings are memory-only and contain no query text, URLs or candidate titles.
+  const diagnosticSamples = [];
+
   try {
-    const raw = JSON.parse(localStorage.getItem('minimalSearchHistory') || '[]');
-    history = Array.isArray(raw) ? raw.filter(v => typeof v === 'string').slice(0, 30) : [];
+    const saved = JSON.parse(localStorage.getItem('minimalSearchHistory') || '[]');
+    if (Array.isArray(saved)) history = saved.filter(v => typeof v === 'string').slice(0, 30);
+    const data = JSON.parse(localStorage.getItem('minimalSuggestUsage') || '[]');
+    if (Array.isArray(data)) usage = data.filter(v => v && typeof v.key === 'string' && typeof v.prefix === 'string').slice(0, 80);
   } catch (_) {}
-  const isOnline = () => {
+
+  function isOnline() {
     try { return localStorage.getItem('onlineSuggestions') !== 'off'; }
     catch (_) { return true; }
-  };
-  function stopPending() {
-    clearTimeout(localTimer); clearTimeout(remoteTimer);
-    if (controller) { controller.abort(); controller = null; }
   }
-  function close() {
-    version++; dismissed = true; stopPending();
-    selected = -1; items = []; list.hidden = true;
-    list.replaceChildren();
+  function usageFor(item, text) {
+    const key = keyFor(item);
+    const matching = usage.filter(row => row.key === key);
+    const count = matching.reduce((sum, row) => sum + (Number(row.count) || 0), 0);
+    const lastUsed = Math.max(0, ...matching.map(row => Number(row.lastUsed) || 0));
+    const adaptive = matching.reduce((sum, row) => sum + (row.prefix.startsWith(normalize(text)) ? Math.min(10, row.count || 0) : 0), 0);
+    return {...item, count, lastUsed, adaptive};
+  }
+  // Only selections/submissions affect usage. Never persist each keystroke.
+  function recordChoice(typed, item) {
+    const key = keyFor(item);
+    const prefix = normalize(typed).slice(0, 160);
+    if (!prefix) return;
+    const previous = usage.findIndex(row => row.key === key && row.prefix === prefix);
+    const count = previous >= 0 ? Math.min(100, (usage[previous].count || 0) + 1) : 1;
+    if (previous >= 0) usage.splice(previous, 1);
+    usage.unshift({key, prefix, count, lastUsed:Date.now()});
+    usage = usage.slice(0, 80);
+    try { localStorage.setItem('minimalSuggestUsage', JSON.stringify(usage)); } catch (_) {}
+  }
+  function recordSearch(value, typed = value, candidate = null) {
+    history = [value, ...history.filter(row => row !== value)].slice(0, 30);
+    recordChoice(typed, candidate?.url ? candidate : {text:value});
+  }
+
+  function abortWork() {
+    if (activeRequest) activeRequest.abort();
+    activeRequest = null;
+  }
+  const panelOpen = () => combo.classList.contains('is-suggesting');
+  function setPanelHeight(height) {
+    // The search capsule stays at its original size; only its single backplate grows.
+    panelHeight = height;
+    combo.style.setProperty('--suggestion-height', `${height}px`);
+    list.style.height = `${height}px`;
+  }
+  function cancelShrink() {
+    clearTimeout(shrinkTimer);
+    shrinkTimer = null;
+  }
+  function measuredHeight() {
+    const available = Math.max(0, window.innerHeight - list.getBoundingClientRect().top - 12);
+    const content = [...list.children].reduce((sum, row) => sum + row.offsetHeight, 0) + 16;
+    return Math.min(content, 332, available);
+  }
+  function resizePanel(target, immediate = false) {
+    cancelShrink();
+    if (immediate || target >= panelHeight) {
+      setPanelHeight(target);
+      return;
+    }
+    // Local history/bookmarks and remote suggestions resolve at different times.
+    // Never contract for a partial batch, only the final merged candidate set.
+    if (!providersSettled) return;
+    // After the providers settle, still wait for the typing-idle window.
+    const wait = Math.max(0, SHRINK_IDLE_MS - (performance.now() - lastEditAt));
+    if (!wait) { setPanelHeight(target); return; }
+    const token = generation;
+    shrinkTimer = setTimeout(() => {
+      shrinkTimer = null;
+      if (token === generation && panelOpen() && items.length) setPanelHeight(measuredHeight());
+    }, wait);
+  }
+  function hide() {
+    cancelShrink();
+    // Keep outgoing rows inside the shrinking backplate until the animation finishes.
     input.setAttribute('aria-expanded', 'false');
     input.removeAttribute('aria-activedescendant');
+    list.setAttribute('aria-hidden', 'true');
+    list.inert = true;
+    combo.classList.remove('is-suggesting');
+    document.dispatchEvent(new Event('newtab-suggestion-selection-changed'));
+    setPanelHeight(0);
+    clearTimeout(hideTimer);
+    ghostLayer.replaceChildren();
+    if (reduceMotion.matches || list.hidden) {
+      list.hidden = true;
+      list.replaceChildren();
+    } else {
+      hideTimer = setTimeout(() => {
+        if (panelOpen()) return;
+        list.hidden = true;
+        list.replaceChildren();
+      }, PANEL_DURATION);
+    }
   }
-  function makeIcon(type) {
+  function close() {
+    generation++;
+    providersSettled = true;
+    dismissed = true;
+    abortWork();
+    selected = -1;
+    selectedKey = null;
+    items = [];
+    hide();
+  }
+  function candidateIcon(type) {
     const icon = document.createElement('span');
     icon.className = 'suggestion-icon';
-    icon.textContent = type === 'bookmark' ? '↗' : type === 'history' ? '↶' : '⌕';
+    icon.textContent = type === 'bookmark' || type === 'url' ? '↗' : type === 'history' ? '↶' : '⌕';
     icon.setAttribute('aria-hidden', 'true');
     return icon;
   }
-  function draw() {
-    if (dismissed || !currentText || document.activeElement !== input) {
-      list.hidden = true;
-      input.setAttribute('aria-expanded', 'false');
-      return;
-    }
-    const next = [];
-    const seen = new Set();
-    // Local matches always remain ahead of online suggestions. Stable selection is
-    // reset only on input changes, not when a delayed online response is appended.
-    for (const result of [...historyResults, ...bookmarkResults, ...onlineResults]) {
-      const key = (result.url || result.text).toLocaleLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key); next.push(result);
-      if (next.length === MAX_ITEMS) break;
-    }
-    items = next;
-    if (selected >= items.length) selected = -1;
-    const fragment = document.createDocumentFragment();
-    items.forEach((item, index) => {
-      const button = document.createElement('button');
-      button.type = 'button'; button.className = 'suggestion-item';
-      button.id = `search-suggestion-${index}`;
-      button.setAttribute('role', 'option');
-      button.setAttribute('aria-selected', String(index === selected));
-      const title = document.createElement('span');
-      title.className = 'suggestion-title'; title.textContent = item.text;
-      const source = document.createElement('span');
-      source.className = 'suggestion-label';
-      source.textContent = settings.locale === 'en'
-        ? {history:'Recent', bookmark:'Bookmark', online:'Suggest'}[item.type]
-        : {history:'最近搜索', bookmark:'书签', online:'搜索建议'}[item.type];
-      button.append(makeIcon(item.type), title, source);
-      button.addEventListener('pointerdown', event => event.preventDefault());
-      button.addEventListener('click', () => {
-        selected = index;
-        form.requestSubmit();
-      });
-      fragment.append(button);
-    });
-    list.replaceChildren(fragment);
-    list.hidden = !items.length;
-    input.setAttribute('aria-expanded', String(!!items.length));
-    updateActive();
-  }
   function updateActive() {
-    for (const [i, node] of [...list.children].entries()) {
-      node.setAttribute('aria-selected', String(i === selected));
+    for (const [index, node] of [...list.children].entries()) {
+      node.setAttribute('aria-selected', String(index === selected));
     }
     if (selected >= 0 && items[selected]) {
       input.setAttribute('aria-activedescendant', `search-suggestion-${selected}`);
       list.children[selected]?.scrollIntoView({block:'nearest'});
     } else input.removeAttribute('aria-activedescendant');
+    document.dispatchEvent(new Event('newtab-suggestion-selection-changed'));
   }
-  function parseOnline(engine, payload) {
-    if (engine === 'baidu') {
-      return Array.isArray(payload?.g) ? payload.g.map(row => row?.q) : [];
-    }
-    return Array.isArray(payload) && Array.isArray(payload[1]) ? payload[1] : [];
+  function createRow() {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'suggestion-item';
+    button.setAttribute('role', 'option');
+    const title = document.createElement('span');
+    title.className = 'suggestion-title';
+    const label = document.createElement('span');
+    label.className = 'suggestion-label';
+    button.append(candidateIcon('online'), title, label);
+    // The candidate is refreshed on reconciliation; this handler never captures stale data.
+    button.addEventListener('pointerdown', event => event.preventDefault());
+    button.addEventListener('click', () => {
+      const item = button._candidate;
+      if (!item || !panelOpen()) return;
+      selectedKey = keyFor(item);
+      selected = items.findIndex(row => keyFor(row) === selectedKey);
+      form.requestSubmit();
+    });
+    return button;
   }
-  async function requestRemote(text, engine, token) {
-    if (!isOnline() || Date.now() < (failedUntil.get(engine) || 0)) return;
-    const key = `${engine}:${settings.locale}:${text}`;
-    const cached = onlineCache.get(key);
-    if (cached && Date.now() - cached.time < CACHE_TTL) {
-      if (token === version) { onlineResults = cached.values; draw(); }
+  function draw(immediateShrink = false) {
+    if (dismissed || !currentText || document.activeElement !== input) {
+      hide();
       return;
     }
-    const request = new AbortController(); controller = request;
-    const timeout = setTimeout(() => request.abort(), REMOTE_TIMEOUT);
+    // An empty intermediate snapshot must not collapse an already-open capsule.
+    // The last result will decide whether an empty query needs closing.
+    if (!items.length && !panelOpen()) return;
+    if (!items.length && !list.children.length) {
+      // Provider snapshots can repeatedly be empty; do not restart outgoing-row fades.
+      if (immediateShrink) setPanelHeight(Math.min(panelHeight,
+        Math.max(0, window.innerHeight - list.getBoundingClientRect().top - 12)));
+      return;
+    }
+    clearTimeout(hideTimer);
+    const opening = !panelOpen();
+    // Reuse visible rows by candidate identity so typing does not flash all content.
+    const existing = new Map([...list.children].map(row => [row.dataset.key, row]));
+    const before = new Map();
+    if (!reduceMotion.matches && !opening) {
+      for (const row of list.children) before.set(row.dataset.key, row.getBoundingClientRect());
+    }
+    const nextKeys = new Set(items.map(keyFor));
+    // Incoming provider snapshots must not prematurely cancel an outgoing fade.
+    for (const ghost of ghostLayer.children) {
+      if (nextKeys.has(ghost.dataset.key)) ghost.remove();
+    }
+    const fadingKeys = new Set([...ghostLayer.children].map(node => node.dataset.key));
+    if (!opening && !reduceMotion.matches) {
+      const layerTop = list.getBoundingClientRect().top;
+      for (const [key, row] of existing) {
+        if (nextKeys.has(key) || fadingKeys.has(key)) continue;
+        const rect = before.get(key);
+        if (!rect) continue;
+        const ghost = row.cloneNode(true);
+        ghost.className = 'suggestion-ghost';
+        ghost.dataset.key = key;
+        ghost.removeAttribute('role');
+        ghost.removeAttribute('id');
+        ghost.setAttribute('aria-hidden', 'true');
+        ghost.tabIndex = -1;
+        ghost.style.top = `${rect.top - layerTop}px`;
+        ghostLayer.append(ghost);
+        ghost.animate([{opacity:1,transform:'translateY(0)'},
+          {opacity:0,transform:'translateY(-7px)'}],
+          {duration:170,easing:'cubic-bezier(.2,.75,.25,1)'}).onfinish = () => ghost.remove();
+      }
+    }
+    const fragment = document.createDocumentFragment();
+    const inserted = [];
+    items.forEach((item, index) => {
+      const key = keyFor(item);
+      const row = existing.get(key) || createRow();
+      if (!existing.has(key)) inserted.push(row);
+      else row.getAnimations().forEach(animation => animation.cancel());
+      row.dataset.key = key;
+      row._candidate = item;
+      row.id = `search-suggestion-${index}`;
+      row.setAttribute('aria-selected', String(index === selected));
+      row.querySelector('.suggestion-icon').textContent = item.type === 'bookmark' || item.type === 'url'
+        ? '↗' : item.type === 'history' ? '↶' : '⌕';
+      const title = row.querySelector('.suggestion-title');
+      title.textContent = item.text;
+      title.title = item.url || item.text;
+      row.querySelector('.suggestion-label').textContent = item.type === 'search'
+        ? (settings.locale === 'en' ? `Search with ${ENGINE_META[settings.engine].name}`
+          : `使用 ${ENGINE_META[settings.engine].name} 搜索`)
+        : ((labels[settings.locale] || labels.zh)[item.type] || '');
+      fragment.append(row);
+    });
+    list.replaceChildren(fragment);
+    list.hidden = false;
+    list.inert = !items.length;
+    list.setAttribute('aria-hidden', String(!items.length));
+    if (!items.length) {
+      // Outdated rows are gone and cannot be clicked or selected; the outer
+      // surface remains stable until the replacement providers settle.
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+      document.dispatchEvent(new Event('newtab-suggestion-selection-changed'));
+      if (immediateShrink) setPanelHeight(Math.min(panelHeight,
+        Math.max(0, window.innerHeight - list.getBoundingClientRect().top - 12)));
+      return;
+    }
+    // Max 6 rows; scroll if the viewport is too short for all of them.
+    const targetHeight = measuredHeight();
+    // When the dropdown has never been laid out, let the browser paint 0 -> target.
+    if (opening) {
+      setPanelHeight(0);
+      combo.classList.add('is-suggesting');
+      void combo.offsetHeight;
+    }
+    resizePanel(targetHeight, immediateShrink);
+    input.setAttribute('aria-expanded', 'true');
+    updateActive();
+    if (reduceMotion.matches) return;
+    // FLIP existing items, fade/slide only genuinely new results.
+    for (const row of list.children) {
+      const old = before.get(row.dataset.key);
+      if (old) {
+        const current = row.getBoundingClientRect();
+        const shift = old.top - current.top;
+        if (Math.abs(shift) > 1) {
+          row.animate([{transform:`translateY(${shift}px)`},{transform:'translateY(0)'}],
+            {duration:260, easing:'cubic-bezier(.2,.75,.25,1)'});
+        }
+      } else if (inserted.includes(row) && !opening) {
+        row.animate([{opacity:0,transform:'translateY(-7px)'},{opacity:1,transform:'translateY(0)'}],
+          {duration:220, easing:'cubic-bezier(.2,.75,.25,1)'});
+      }
+    }
+  }
+  function showCandidates(candidates) {
+    // The two explicit actions for a URL stay visible and in a predictable
+    // order, regardless of frecency or when bookmarks finish loading.
+    if (QueryAnalyzer.analyze(currentText).type === 'url') {
+      const visit = candidates.find(item => item.type === 'url');
+      const search = candidates.find(item => item.type === 'search');
+      candidates = [visit, search, ...candidates.filter(item => item !== visit && item !== search)].filter(Boolean);
+    }
+    // Once the user moves the keyboard highlight, async arrivals must neither
+    // change its position nor evict its destination from the visible six rows.
+    const pinned = selectedKey && (candidates.find(item => keyFor(item) === selectedKey)
+      || items.find(item => keyFor(item) === selectedKey));
+    if (pinned && selected >= 0) {
+      const remaining = candidates.filter(item => keyFor(item) !== selectedKey).slice(0, MAX_ITEMS - 1);
+      remaining.splice(Math.min(selected, remaining.length), 0, pinned);
+      items = remaining;
+    } else {
+      items = candidates.slice(0, MAX_ITEMS);
+    }
+    selected = selectedKey ? items.findIndex(item => keyFor(item) === selectedKey) : -1;
+    if (selected < 0) selectedKey = null;
+    draw();
+  }
+  function delay(ms, signal) {
+    return new Promise(resolve => {
+      if (signal.aborted) { resolve(false); return; }
+      const timeout = setTimeout(() => { signal.removeEventListener('abort', cancel); resolve(true); }, ms);
+      function cancel() { clearTimeout(timeout); resolve(false); }
+      signal.addEventListener('abort', cancel, {once:true});
+    });
+  }
+  function parseOnline(engine, payload) {
+    if (engine === 'baidu') return Array.isArray(payload?.g) ? payload.g.map(row => row?.q) : [];
+    return Array.isArray(payload) && Array.isArray(payload[1]) ? payload[1] : [];
+  }
+  async function requestOnline({query, engine, locale, signal}) {
+    if (!isOnline() || Date.now() < (failedUntil.get(engine) || 0)) return [];
+    const key = `${engine}:${locale}:${query}`;
+    const cached = onlineCache.get(key);
+    if (cached && Date.now() - cached.time < CACHE_TTL) return cached.values;
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    signal.addEventListener('abort', cancel, {once:true});
+    const timeout = setTimeout(() => controller.abort(), REMOTE_TIMEOUT);
     try {
-      const response = await fetch(provider[engine](text, settings.locale), {
-        signal:request.signal, credentials:'omit', cache:'no-store'
+      if (signal.aborted) return [];
+      const response = await fetch(endpoints[engine](query, locale), {
+        signal:controller.signal, credentials:'omit', cache:'no-store'
       });
-      if (!response.ok) throw new Error('Suggestions HTTP error');
-      if (Number(response.headers.get('content-length')) > 65536) throw new Error('Suggestions oversized');
-      const data = await response.json();
-      const words = parseOnline(engine, data)
-        .filter(value => typeof value === 'string' && value.length <= 120)
-        .slice(0, 10).map(value => ({type:'online',text:value}));
+      if (!response.ok) throw new Error('Suggestion service error');
+      if (Number(response.headers.get('content-length')) > 65536) throw new Error('Oversized suggestion response');
+      const payload = await response.json();
+      const values = parseOnline(engine, payload)
+        .filter(value => typeof value === 'string' && value.trim() && value.length <= 120)
+        .slice(0, 10).map(text => ({type:'online', text}));
       if (onlineCache.size >= 40) onlineCache.delete(onlineCache.keys().next().value);
-      onlineCache.set(key, {values:words, time:Date.now()});
-      if (token === version && !request.signal.aborted) { onlineResults = words; draw(); }
-    } catch (error) {
-      // Timeout / DNS / blocked / invalid JSON: silently degrade to local matches.
-      if (!request.signal.aborted || token === version) failedUntil.set(engine, Date.now() + 60000);
+      onlineCache.set(key, {values, time:Date.now()});
+      return values;
+    } catch (_) {
+      if (!signal.aborted) failedUntil.set(engine, Date.now() + 60000);
+      return [];
     } finally {
       clearTimeout(timeout);
-      if (controller === request) controller = null;
+      signal.removeEventListener('abort', cancel);
     }
   }
-  async function requestBookmarks(text, token) {
-    if (!chrome.bookmarks?.search) return;
-    try {
-      const results = await chrome.bookmarks.search(text);
-      if (token !== version) return;
-      bookmarkResults = results.filter(row => row.url && /^https?:\/\//i.test(row.url))
-        .slice(0, 3).map(row => ({type:'bookmark', text:row.title || row.url, url:row.url}));
-      draw();
-    } catch (_) { /* Bookmark permission may have been revoked. */ }
+
+  // Providers do not know about the DOM or each other.
+  CandidatePipeline.register({
+    name:'url',
+    async provide({query}) {
+      const parsed = QueryAnalyzer.analyze(query);
+      return parsed.type === 'url' ? [
+        {type:'url', text:parsed.raw, url:parsed.url},
+        {type:'search', text:parsed.raw}
+      ] : [];
+    }
+  });
+  CandidatePipeline.register({
+    name:'history',
+    async provide({query}) {
+      const needle = normalize(query);
+      return FrecencyRank.sort(history.filter(value => normalize(value).includes(needle))
+        .map(text => usageFor({type:'history', text}, query)), query).slice(0, 2);
+    }
+  });
+  CandidatePipeline.register({
+    name:'bookmark',
+    async provide(context) {
+      if (!chrome.bookmarks?.search || !await delay(110, context.signal)) return [];
+      try {
+        const results = await chrome.bookmarks.search(context.query);
+        if (context.signal.aborted) return [];
+        const candidates = results.slice(0, MAX_BOOKMARK_CANDIDATES)
+          .filter(row => row.url && /^https?:\/\//i.test(row.url))
+          .map(row => usageFor({type:'bookmark', text:row.title || row.url, url:row.url}, context.query));
+        // Keep local quality high without starving online suggestions of a slot.
+        return FrecencyRank.sort(candidates, context.query).slice(0, 3);
+      } catch (_) { return []; }
+    }
+  });
+  CandidatePipeline.register({
+    name:'online',
+    async provide(context) {
+      // URLs and potentially sensitive URL-like input should never be sent to suggest APIs.
+      if (context.intent === 'url' || /^https?:\/\//i.test(context.query)) return [];
+      if (context.query.length < 2 || !isOnline() || !await delay(REMOTE_DELAY, context.signal)) return [];
+      // Avoid network traffic when the local candidates already fill the dropdown.
+      if (context.localCount() >= MAX_ITEMS) return [];
+      return requestOnline(context);
+    }
+  });
+
+  const round = value => Math.round(value * 10) / 10;
+  function summarize(values) {
+    const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+    if (!sorted.length) return {samples:0, p50Ms:null, p95Ms:null};
+    const at = quantile => sorted[Math.ceil(quantile * sorted.length) - 1];
+    return {samples:sorted.length, p50Ms:round(at(.5)), p95Ms:round(at(.95))};
   }
+  function diagnostics() {
+    const providers = {};
+    for (const name of ['url', 'history', 'bookmark', 'online']) {
+      providers[name] = summarize(diagnosticSamples
+        .map(sample => sample.providers[name]?.elapsedMs));
+    }
+    const load = performance.getEntriesByName('minimal-new-tab-suggestions-load', 'measure').at(-1);
+    return {
+      // No localStorage writes, raw searches, history or URLs in this snapshot.
+      completedQueries:diagnosticSamples.length,
+      moduleLoadMs:load ? round(load.duration) : null,
+      firstCandidate:summarize(diagnosticSamples.map(sample => sample.firstCandidateMs)),
+      firstLocal:summarize(diagnosticSamples.map(sample => sample.firstLocalMs)),
+      firstOnline:summarize(diagnosticSamples.map(sample => sample.firstOnlineMs)),
+      providers
+    };
+  }
+
   function update() {
-    stopPending();
-    const token = ++version;
-    dismissed = false; selected = -1;
+    abortWork();
+    const token = ++generation;
+    selected = -1;
+    selectedKey = null;
     currentText = input.value.trim().slice(0, 160);
-    historyResults = []; bookmarkResults = []; onlineResults = [];
-    if (!currentText || composing) { list.hidden = true; input.setAttribute('aria-expanded', 'false'); return; }
-    const needle = currentText.toLocaleLowerCase();
-    historyResults = history.filter(value => value.toLocaleLowerCase().includes(needle))
-      .slice(0, 2).map(value => ({type:'history',text:value}));
-    draw();
-    // Bookmarks are queried through the browser's API, never by copying/scanning
-    // the entire tree on every new-tab startup or every keystroke.
-    localTimer = setTimeout(() => { void requestBookmarks(currentText, token); }, 110);
-    if (currentText.length >= 2 && isOnline()) {
-      const engine = settings.engine;
-      remoteTimer = setTimeout(() => {
-        if (historyResults.length + bookmarkResults.length < MAX_ITEMS) void requestRemote(currentText, engine, token);
-      }, REMOTE_DELAY);
-    }
+    dismissed = false;
+    items = [];
+    cancelShrink();
+    providersSettled = false;
+    // Changing settings without focusing the search field must not leak an old query.
+    if (!currentText || composing || document.activeElement !== input) { hide(); return; }
+    lastEditAt = performance.now();
+    if (panelOpen()) draw(); // Clear stale, clickable candidates without closing the shell.
+    const controller = new AbortController();
+    activeRequest = controller;
+    let localCount = 0;
+    const sample = {start:performance.now(), firstCandidateMs:null, firstLocalMs:null,
+      firstOnlineMs:null, providers:{}};
+    const context = {
+      query:currentText,
+      intent:QueryAnalyzer.analyze(currentText).type,
+      engine:settings.engine,
+      locale:settings.locale,
+      signal:controller.signal,
+      localCount: () => localCount,
+      onProviderSettled: ({name, elapsedMs, count}) => {
+        sample.providers[name] = {elapsedMs:round(elapsedMs), count};
+      }
+    };
+    void CandidatePipeline.collect(context, candidates => {
+      if (token !== generation || controller.signal.aborted) return;
+      localCount = candidates.filter(item => item.type !== 'online').length;
+      showCandidates(candidates.map(item => usageFor(item, currentText))
+        .sort((a, b) => FrecencyRank.score(b, currentText) - FrecencyRank.score(a, currentText)));
+      if (!panelOpen()) return;
+      const elapsed = round(performance.now() - sample.start);
+      if (sample.firstCandidateMs === null) sample.firstCandidateMs = elapsed;
+      if (sample.firstLocalMs === null && candidates.some(item => item.type !== 'online')) sample.firstLocalMs = elapsed;
+      if (sample.firstOnlineMs === null && candidates.some(item => item.type === 'online')) sample.firstOnlineMs = elapsed;
+    }).then(() => {
+      if (token !== generation || controller.signal.aborted) return;
+      providersSettled = true;
+      if (items.length && panelOpen()) resizePanel(measuredHeight());
+      if (!items.length && panelOpen()) {
+        // All providers have finished: this is a genuine no-result state,
+        // not a temporary gap between history and bookmark responses.
+        cancelShrink();
+        const wait = Math.max(0, SHRINK_IDLE_MS - (performance.now() - lastEditAt));
+        shrinkTimer = setTimeout(() => {
+          shrinkTimer = null;
+          if (token === generation && !items.length && panelOpen()) hide();
+        }, wait);
+      }
+      diagnosticSamples.push(sample);
+      if (diagnosticSamples.length > MAX_DIAGNOSTIC_SAMPLES) diagnosticSamples.shift();
+    });
   }
-  input.addEventListener('compositionstart', () => { composing = true; stopPending(); });
+  input.addEventListener('compositionstart', () => { composing = true; abortWork(); hide(); });
   input.addEventListener('compositionend', () => { composing = false; update(); });
   input.addEventListener('input', event => { if (!composing && !event.isComposing) update(); });
-  input.addEventListener('focus', () => { if (input.value.trim() && list.hidden) update(); });
+  input.addEventListener('focus', () => { if (input.value.trim() && !panelOpen()) update(); });
   input.addEventListener('keydown', event => {
     if (composing || event.isComposing || event.keyCode === 229) {
       if (event.key === 'Enter') event.preventDefault();
       return;
     }
-    if (event.key === 'Escape' && !list.hidden) {
+    if (event.key === 'Escape' && panelOpen()) {
       event.preventDefault(); event.stopPropagation(); close(); return;
     }
-    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && items.length && !list.hidden) {
+    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && items.length && panelOpen()) {
       event.preventDefault();
       selected = event.key === 'ArrowDown' ? (selected + 1) % items.length
         : (selected <= 0 ? items.length - 1 : selected - 1);
+      selectedKey = keyFor(items[selected]);
       updateActive();
     }
   });
-  input.addEventListener('blur', () => { close(); });
+  input.addEventListener('blur', close);
   document.addEventListener('pointerdown', event => {
     if (!list.contains(event.target) && event.target !== input) close();
   });
   document.addEventListener('newtab-locale-changed', draw);
-  window.NewTabSuggest = {
+  window.addEventListener('resize', () => { if (panelOpen()) draw(true); });
+  list.inert = true;
+  list.setAttribute('aria-hidden', 'true');
+  window.NewTabSuggest = Object.freeze({
     close,
     engineChanged: update,
     onlineChanged: update,
-    recordSearch: value => { history = [value, ...history.filter(x => x !== value)].slice(0, 30); },
-    chosenDestination: () => items[selected] && !list.hidden ? items[selected] : null
-  };
+    recordSearch,
+    recordNavigation: recordChoice,
+    diagnostics,
+    chosenDestination: () => selected >= 0 && panelOpen() ? items[selected] : null
+  });
   if (input.value.trim()) update();
 })();

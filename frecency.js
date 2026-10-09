@@ -1,47 +1,42 @@
 'use strict';
-
-// Lightweight ranking engine for suggestion candidates.
-// score = text match + usage + freshness + source priority
+// Small ranking function, not a browser-wide history index.
 (() => {
-  const SOURCE_WEIGHT = Object.freeze({
-    url: 100,
-    bookmark: 90,
-    history: 70,
-    online: 40
-  });
+  const SOURCE_WEIGHT = Object.freeze({url: 155, search: 150, history: 95, bookmark: 90, online: 35});
+  const normalize = value => String(value || '').normalize('NFKC').toLocaleLowerCase();
 
-  function normalize(value) {
-    return String(value || '').toLocaleLowerCase();
+  function matchScore(candidate, query) {
+    const q = normalize(query);
+    if (!q) return 0;
+    const text = normalize(candidate.text);
+    const url = normalize(candidate.url);
+    if (text === q) return 105;
+    if (text.startsWith(q)) return 80;
+    if (url && (url === q || url.replace(/^https?:\/\//, '').startsWith(q))) return 75;
+    if (text.includes(q)) return 50;
+    if (url.includes(q)) return 35;
+    // Keep semantically related suggestions returned by the selected search engine.
+    return candidate.type === 'online' ? 0 : -1000;
   }
 
-  function matchScore(text, query) {
-    const target = normalize(text);
-    const needle = normalize(query);
-    if (!needle) return 0;
-    if (target === needle) return 100;
-    if (target.startsWith(needle)) return 70;
-    if (target.includes(needle)) return 40;
-    return 0;
+  function score(candidate, query, now = Date.now()) {
+    const count = Math.max(0, Number(candidate.count) || 0);
+    const last = Number(candidate.lastUsed) || 0;
+    const ageDays = last > 0 ? Math.max(0, (now - last) / 86400000) : Infinity;
+    // Old choices fade out instead of becoming permanent ranking winners.
+    const decay = Number.isFinite(ageDays) ? Math.pow(0.5, ageDays / 45) : 0;
+    const usage = Math.min(35, Math.log2(count * decay + 1) * 9);
+    const freshness = Number.isFinite(ageDays) ? 20 * Math.pow(0.5, ageDays / 14) : 0;
+    const adaptive = candidate.adaptive ? Math.min(25, 9 * Math.log2(candidate.adaptive * decay + 1)) : 0;
+    return (SOURCE_WEIGHT[candidate.type] || 0) + matchScore(candidate, query) + usage + freshness + adaptive;
   }
 
-  function calculate(candidate, query, now = Date.now()) {
-    const usage = Math.min(Number(candidate.count || 0) * 5, 50);
-    const last = Number(candidate.lastUsed || 0);
-    const ageDays = last ? Math.max((now - last) / 86400000, 0) : 365;
-    const freshness = Math.max(30 - ageDays, 0);
-
-    return matchScore(candidate.text, query)
-      + usage
-      + freshness
-      + (SOURCE_WEIGHT[candidate.type] || 0);
-  }
-
-  window.FrecencyRank = {
+  window.FrecencyRank = Object.freeze({
+    score,
     sort(candidates, query) {
-      return [...candidates]
-        .map(item => ({ item, score: calculate(item, query) }))
-        .sort((a, b) => b.score - a.score)
+      return candidates.map((item, index) => ({item, index, score: score(item, query)}))
+        .filter(row => row.score >= 0)
+        .sort((a, b) => b.score - a.score || a.index - b.index)
         .map(row => row.item);
     }
-  };
+  });
 })();
