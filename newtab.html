@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>新标签页</title>
+<link rel="icon" href="/icons/newtab-favicon.png">
+<script src="boot.js"></script>
+<link rel="stylesheet" href="style.css">
+<script src="site-icons.js" defer></script>
+<script src="newtab.js" defer></script>
+<script src="bookmarks.js" defer></script>
+</head>
+<body>
+<img id="wallpaper" class="wallpaper" alt="" aria-hidden="true">
+<div class="focus-halo" aria-hidden="true"></div>
+
+<button id="open-bookmarks" class="bookmark-toggle glass-button" type="button" aria-expanded="false" aria-controls="bookmark-sidebar" aria-label="展开书签侧边栏" title="展开书签侧边栏">
+  <svg class="sidebar-layout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.8" y="4.5" width="16.4" height="15" rx="2.8"/><path d="M9.1 4.8v14.4"/></svg>
+</button>
+
+<aside id="bookmark-sidebar" class="glass-panel bookmark-sidebar" aria-hidden="true" aria-label="书签导航">
+  <header class="sidebar-heading safari-header">
+    <button id="bookmark-back" type="button" class="safari-round-icon" aria-label="返回" title="返回">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 5.5-6.5 6.5 6.5 6.5"/></svg>
+    </button>
+    <h2 id="bookmark-current-title">书签</h2>
+    <button id="bookmark-close" type="button" class="safari-round-icon" aria-label="收起书签侧边栏" title="收起书签侧边栏" aria-controls="bookmark-sidebar">
+      <svg class="sidebar-layout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.8" y="4.5" width="16.4" height="15" rx="2.8"/><path d="M9.1 4.8v14.4"/></svg>
+    </button>
+  </header>
+  <div class="bookmark-search glass-field">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.5"/><path d="m16 16 5 5"/></svg>
+    <input id="bookmark-query" type="search" autocomplete="off" spellcheck="false" placeholder="搜索“书签”" data-i18n-placeholder="bookmarkPlaceholder" aria-label="搜索书签">
+    <button id="clear-bookmark-query" type="button" class="clear-search safari-clear" hidden aria-label="清除搜索">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.5 6.5 11 11m0-11-11 11"/></svg>
+    </button>
+  </div>
+  <nav id="bookmark-tree" class="bookmark-tree" aria-label="书签目录"><p class="empty-note">点击文件夹进入</p></nav>
+</aside>
+
+
+<main id="main" class="main">
+  <section class="search-area" aria-label="搜索">
+    <div class="search-combo">
+      <form id="search-form" class="glass-panel search-bar" autocomplete="off" role="search">
+        <div id="engine-control" class="engine-control">
+          <button id="engine-button" class="engine-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="engine-menu" aria-label="切换搜索引擎" title="选择搜索引擎">
+            <img id="engine-icon" src="assets/google.ico" alt="" width="21" height="21">
+            <span id="engine-name">Google</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="chevron"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div id="engine-menu" class="engine-menu" role="menu" aria-hidden="true" inert>
+            <button type="button" role="menuitemradio" aria-checked="true" data-engine="google"><img src="assets/google.ico" alt=""><span>Google</span><svg class="selected-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5 10 17l8.5-9"/></svg></button>
+            <button type="button" role="menuitemradio" aria-checked="false" data-engine="baidu"><img src="assets/baidu.ico" alt=""><span>Baidu</span><svg class="selected-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5 10 17l8.5-9"/></svg></button>
+            <button type="button" role="menuitemradio" aria-checked="false" data-engine="bing"><img id="bing-menu-icon" src="assets/bing.ico" alt=""><span>Bing</span><svg class="selected-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5 10 17l8.5-9"/></svg></button>
+          </div>
+        </div>
+        <input id="query" type="search" autocomplete="off" spellcheck="false" placeholder="搜索..." data-i18n-placeholder="searchPlaceholder" aria-label="搜索内容" aria-autocomplete="list" aria-expanded="false" aria-controls="search-suggestions">
+        <button class="search-round-button search-submit" type="submit" aria-label="搜索" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
+      </form>
+      <div id="search-suggestions" class="search-suggestions" role="listbox" aria-label="搜索建议" hidden></div>
+    </div>
+  </section>
+</main>
+<p id="credit" class="credit" hidden></p>
+
+<button id="open-settings" class="settings-toggle glass-button" type="button" aria-expanded="false" aria-controls="settings" aria-label="设置" title="设置">
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
+</button>
+<aside id="settings" class="glass-panel settings-panel" aria-hidden="true" aria-label="设置">
+<header class="settings-heading"><h2 data-i18n="settings">设置</h2><button id="close-settings" type="button" class="subtle-button" aria-label="关闭设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12m0-12L6 18"/></svg></button></header>
+<div class="language-row"><span class="language-label"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span class="row-name" data-i18n="language">语言</span></span><div id="locale-segmented" class="segmented" data-selected="zh" role="group" aria-label="界面语言"><span class="segment-thumb" aria-hidden="true"></span><button type="button" data-locale="zh" class="active" aria-pressed="true">中</button><button type="button" data-locale="en" aria-pressed="false">EN</button></div></div>
+<label class="suggest-pref-row"><span data-i18n="onlineSuggestions">在线搜索建议</span><input id="online-suggestions" type="checkbox" checked></label>
+<fieldset id="background-options" class="mode-group"><legend data-i18n="background">背景</legend>
+<label class="mode-card"><input type="radio" name="mode" value="auto"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="3.4"/><path d="M7 1.5v1M7 11v1.5M1.5 7h1M11.5 7h1M3.1 3.1l.8.8M10.1 10.1l.8.8M3.1 10.9l.8-.8"/><path d="M16 4.5a7.5 7.5 0 1 0 3.6 14.4A8.5 8.5 0 0 1 16 4.5Z"/></svg></span><span data-i18n="auto">自动跟随系统</span></label>
+<label class="mode-card"><input type="radio" name="mode" value="white"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span data-i18n="white">纯白</span></label>
+<label class="mode-card"><input type="radio" name="mode" value="black"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.4 15.3A8.7 8.7 0 0 1 8.7 3.6 8.8 8.8 0 1 0 20.4 15.3Z"/></svg></span><span data-i18n="black">纯黑</span></label>
+<label class="mode-card"><input type="radio" name="mode" value="bing"><span class="mode-icon bing-brand-icon" aria-hidden="true"><img id="bing-wallpaper-icon" src="assets/bing.ico" alt=""></span><span data-i18n="daily">必应每日壁纸</span></label>
+<label class="mode-card"><input type="radio" name="mode" value="local"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.3" cy="9" r="1.4"/><path d="m4 17 5-5 3.4 3.4 3.1-3.1L21 18"/></svg></span><span data-i18n="local">本地图片</span></label>
+<label class="mode-card"><input type="radio" name="mode" value="remote"><span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 13.8a4.4 4.4 0 0 0 6.4.2l2.5-2.5A4.4 4.4 0 0 0 12.7 5l-1.4 1.4"/><path d="M14 10.2a4.4 4.4 0 0 0-6.4-.2l-2.5 2.5A4.4 4.4 0 0 0 11.3 19l1.4-1.4"/></svg></span><span data-i18n="remote">图片链接</span></label>
+</fieldset>
+<div id="local-control" class="extra-control" hidden><button id="choose-image" class="action-button" type="button" data-i18n="chooseImage">选择本机图片</button><input id="image-file" type="file" accept="image/png,image/jpeg,image/webp,image/avif,image/gif" hidden><small data-i18n="localHelp">仅保存在此设备上</small></div>
+<div id="remote-control" class="extra-control" hidden><label for="image-url" data-i18n="imageLink">HTTPS 图片直链</label><input id="image-url" type="url" placeholder="https://example.com/wallpaper.jpg" spellcheck="false"><button id="save-url" class="action-button" type="button" data-i18n="saveImage">保存并缓存</button><small data-i18n="remoteHelp">链接会同步，图片保存在本地</small></div>
+<p id="status" role="status" aria-live="polite" class="status"></p>
+</aside>
+</body>
+</html>

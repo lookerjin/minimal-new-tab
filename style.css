@@ -1,0 +1,676 @@
+:root {
+  font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  color-scheme: light;
+  --fg:#263344; --muted:#63748a; --hint:#7b8da4; --background:#fff;
+  --glass:rgba(237,245,255,.75); --glass-raised:rgba(237,245,255,.87); --glass-hover:rgba(255,255,255,.29);
+  --border:rgba(255,255,255,.66); --line:rgba(79,109,149,.14);
+  --shadow:0 18px 55px rgba(15,43,77,.15); --accent:#387cec;
+  --blur:blur(23px) saturate(150%); --side-width:292px;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+:root[data-theme="dark"] {
+  color-scheme:dark; --fg:#f3f6fd; --muted:#bbc7d7; --hint:#98aabe; --background:#0d1016;
+  --glass:rgba(32,40,54,.78); --glass-raised:rgba(38,48,64,.89); --glass-hover:rgba(255,255,255,.08);
+  --border:rgba(255,255,255,.13); --line:rgba(245,250,255,.12);
+  --shadow:0 18px 60px rgba(0,0,0,.35); --accent:#88aeff;
+}
+:root[data-theme="photo"] {
+  color-scheme:light; --fg:#27384b; --muted:#5e7188; --hint:#7a8ea4; --background:#14263c;
+  --glass:rgba(232,243,255,.67); --glass-raised:rgba(239,247,255,.80); --glass-hover:rgba(255,255,255,.26);
+  --border:rgba(255,255,255,.55); --line:rgba(56,96,147,.15);
+  --shadow:0 18px 58px rgba(5,26,50,.20); --accent:#2c75e7;
+}
+*,*::before,*::after {box-sizing:border-box}
+html,body {width:100%;min-height:100%;margin:0}
+body {color:var(--fg);background:var(--background);overflow:hidden;transition:background-color .24s ease,color .24s ease}
+button,input {font:inherit} button {cursor:pointer} [hidden] {display:none!important}
+button:focus-visible,input:focus-visible,a:focus-visible {outline:2px solid var(--accent);outline-offset:2px}
+svg {width:20px;height:20px;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;fill:none;flex:none}
+.wallpaper {position:fixed;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;pointer-events:none;transition:opacity .45s ease}
+.wallpaper.ready {opacity:1}
+.focus-halo {position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse 45% 18% at 51% 38%,rgba(224,239,255,.37),transparent 85%)}
+:root[data-theme="photo"] .focus-halo {opacity:1}
+.glass-panel,.glass-button,.glass-field {background:var(--glass);border:1px solid var(--border);box-shadow:var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
+.glass-button {display:grid;place-items:center;width:44px;height:44px;border-radius:15px;color:var(--fg);transition:background .2s ease,color .2s ease,transform .24s var(--ease),left .34s var(--ease)}
+.glass-button:hover {background:var(--glass-raised)}
+/* The SAME button lives in both states. Position & icon morph; never duplicate it. */
+.bookmark-toggle {position:fixed;z-index:40;left:20px;top:20px;transform-origin:center}
+.toggle-close-icon {position:absolute;opacity:0;transform:rotate(-65deg) scale(.65);transition:transform .28s var(--ease),opacity .18s ease}
+.toggle-open-icon {transition:transform .28s var(--ease),opacity .18s ease}
+body.sidebar-open .bookmark-toggle {left:calc(16px + var(--side-width) - 21px)}
+body.sidebar-open .toggle-open-icon {opacity:0;transform:rotate(65deg) scale(.65)}
+body.sidebar-open .toggle-close-icon {opacity:1;transform:rotate(0) scale(1)}
+.bookmark-sidebar {
+  position:fixed;z-index:20;left:10px;top:10px;bottom:10px;width:var(--side-width);padding:21px 15px 16px;
+  border-radius:24px;opacity:0;visibility:hidden;pointer-events:none;
+  transform-origin:35px 35px;transform:translate(-10px,-10px) scale(.16,.075);
+  transition:opacity .23s ease,transform .36s var(--ease),visibility 0s linear .36s;
+}
+.bookmark-sidebar.is-open {opacity:1;visibility:visible;pointer-events:auto;transform:translate(0,0) scale(1);transition:opacity .23s ease,transform .36s var(--ease),visibility 0s}
+.sidebar-heading {height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 45px 0 9px;margin-bottom:12px}
+.sidebar-heading h2 {margin:0;font-size:16px;font-weight:650;letter-spacing:.01em}
+.bookmark-search {height:43px;border-radius:14px;display:flex;align-items:center;gap:10px;padding:0 12px;box-shadow:none;background:var(--glass-raised);margin:0 2px 13px}
+.bookmark-search svg {width:17px;height:17px;color:var(--muted)}
+.bookmark-search input {min-width:0;flex:1;border:0;outline:none;background:transparent;color:var(--fg);font-size:13px}
+.bookmark-search input::placeholder,#query::placeholder {color:var(--hint);opacity:1}
+.bookmark-search input::-webkit-search-cancel-button {display:none}
+.clear-search {border:0;background:transparent;color:var(--muted);font-size:19px;line-height:1}
+.bookmark-tree {overflow:auto;max-height:calc(100vh - 160px);padding:1px 2px 10px}
+.bookmark-tree::-webkit-scrollbar,.flyout-scroll::-webkit-scrollbar,.settings-panel::-webkit-scrollbar {width:7px}
+.bookmark-tree::-webkit-scrollbar-thumb,.flyout-scroll::-webkit-scrollbar-thumb,.settings-panel::-webkit-scrollbar-thumb {background:rgba(110,130,150,.23);border-radius:10px}
+.bookmark-row {display:flex;align-items:center;gap:10px;width:100%;min-height:39px;padding:0 10px;border:0;border-radius:12px;color:var(--fg);background:none;text-decoration:none;text-align:left;transition:background .16s ease,transform .18s var(--ease)}
+.bookmark-row:hover,.bookmark-row.is-active,.bookmark-row:focus-visible {background:var(--glass-hover)}
+.bookmark-row:hover {transform:translateX(2px)}
+.bookmark-row.folder {cursor:default}
+.bookmark-icon {display:grid;place-items:center;width:17px;height:17px;flex:none;opacity:.9;color:var(--muted)}
+.bookmark-icon.folder-icon {color:var(--accent)}
+.bookmark-icon svg {width:17px;height:17px;stroke-width:1.75}
+.bookmark-row .bookmark-name {flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500}
+.bookmark-chevron {width:14px;height:14px;color:var(--muted);opacity:.75}
+.bookmark-path {display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--muted);margin-top:3px}
+.bookmark-result .bookmark-name {display:block}
+.bookmark-result .bookmark-text {min-width:0;flex:1}
+.empty-note {margin:12px 10px;font-size:12px;line-height:1.65;color:var(--muted)}
+.bookmark-flyouts {position:fixed;inset:0;z-index:32;pointer-events:none}
+.bookmark-flyout {position:absolute;width:244px;max-height:min(480px,calc(100vh - 26px));padding:8px;overflow:visible;border-radius:18px;transform-origin:left top;opacity:0;transform:translateX(-12px) scale(.88);pointer-events:none;transition:transform .22s var(--ease),opacity .17s ease;will-change:transform,opacity}
+.bookmark-flyout.open {opacity:1;transform:translateX(0) scale(1);pointer-events:auto}
+.bookmark-flyout.closing {opacity:0;transform:translateX(-12px) scale(.88);pointer-events:none}
+.flyout-scroll {overflow:auto;max-height:min(462px,calc(100vh - 44px))}
+.bookmark-flyout .bookmark-row {min-height:38px}
+.main {position:relative;z-index:5;min-height:100vh;display:grid;place-items:center;padding:20px;pointer-events:none;transition:padding-left .34s var(--ease)}
+@media(min-width:1000px){body.sidebar-open .main {padding-left:calc(62px + var(--side-width))}}
+.search-area {width:min(690px,calc(100vw - 54px));transform:translateY(-17vh);pointer-events:auto}
+.search-bar {height:62px;width:100%;border-radius:999px;display:flex;align-items:center;gap:14px;padding:5px 17px 5px 5px;transition:box-shadow .2s ease,transform .2s var(--ease),background .2s ease;background:var(--glass-raised)}
+.search-bar:focus-within {box-shadow:var(--shadow),0 0 0 3px rgba(73,126,225,.13)}
+.engine-control {align-self:stretch;position:relative;flex:none;z-index:10}
+.engine-trigger {height:100%;display:flex;align-items:center;gap:9px;padding:0 13px 0 14px;border:0;border-radius:999px;background:var(--glass-hover);color:var(--fg);font-size:14px;font-weight:600;transition:background .18s ease}
+.engine-trigger:hover {background:rgba(128,159,195,.18)}
+.engine-trigger img {width:21px;height:21px}
+.chevron {width:15px;height:15px;color:var(--muted);transition:transform .23s var(--ease)}
+.engine-control.menu-open .chevron {transform:rotate(180deg)}
+.engine-menu {position:absolute;top:calc(100% + 8px);left:0;width:193px;border-radius:18px;padding:7px;opacity:0;visibility:hidden;pointer-events:none;transform-origin:20px 0;transform:translateY(-10px) scale(.9);transition:transform .22s var(--ease),opacity .18s ease,visibility 0s linear .22s;box-shadow:var(--shadow)}
+.engine-menu.is-open {visibility:visible;opacity:1;pointer-events:auto;transform:translateY(0) scale(1);transition:transform .22s var(--ease),opacity .18s ease,visibility 0s}
+.engine-menu button {display:flex;align-items:center;gap:12px;width:100%;height:42px;border:0;border-radius:12px;background:transparent;color:var(--fg);text-align:left;padding:0 11px}
+.engine-menu button:hover,.engine-menu button[aria-checked="true"] {background:var(--glass-hover)}
+.engine-menu button img {width:20px;height:20px}
+.selected-check {margin-left:auto;color:var(--accent);font-size:17px;visibility:hidden}
+.engine-menu button[aria-checked="true"] .selected-check {visibility:visible}
+.search-divider {width:1px;height:24px;background:var(--line);flex:none}
+#query {height:100%;flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--fg);font-size:16px}
+#query::-webkit-search-cancel-button {display:none}
+/* Always-visible circular text search submit action. */
+:root {--search-round-bg:rgba(154,174,198,.26);--search-round-border:rgba(86,110,144,.15);--search-round-hover:rgba(154,174,198,.37);}
+:root[data-theme="dark"] {--search-round-bg:rgba(232,240,255,.15);--search-round-border:rgba(232,240,255,.17);--search-round-hover:rgba(232,240,255,.24);}
+:root[data-theme="photo"] {--search-round-bg:rgba(221,237,255,.61);--search-round-border:rgba(74,114,159,.20);--search-round-hover:rgba(227,241,255,.79);}
+.search-round-button {display:grid;place-items:center;border:1px solid var(--search-round-border);border-radius:50%;height:38px;width:38px;flex:none;background:var(--search-round-bg);color:var(--fg);opacity:1;transform:none;transition:background-color .18s ease,color .18s ease,border-color .18s ease,transform .18s var(--ease)}
+.search-round-button svg {width:19px;height:19px;stroke-width:2.1}
+.search-round-button:not(:disabled):hover {background:var(--search-round-hover)}
+.search-round-button:active:not(:disabled) {transform:scale(.95)}
+.search-submit:disabled {cursor:default;opacity:1;color:var(--muted);background:var(--search-round-bg)}
+.search-submit:not(:disabled) {color:var(--fg);background:var(--search-round-hover)}
+.search-submit:not(:disabled):hover {color:var(--accent);background:var(--search-round-hover)}
+.search-combo {position:relative}
+.settings-toggle {position:fixed;bottom:18px;right:20px;z-index:41}
+.settings-panel {position:fixed;right:20px;bottom:76px;z-index:35;width:min(360px,calc(100vw - 32px));max-height:calc(100vh - 100px);overflow-y:auto;padding:18px;border-radius:23px;opacity:0;visibility:hidden;pointer-events:none;transform-origin:calc(100% - 22px) calc(100% + 35px);transform:translate(5px,16px) scale(.19,.11);transition:opacity .2s ease,transform .32s var(--ease),visibility 0s linear .32s}
+.settings-panel.is-open {opacity:1;visibility:visible;pointer-events:auto;transform:translate(0,0) scale(1);transition:opacity .2s ease,transform .32s var(--ease),visibility 0s}
+.settings-heading {display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.settings-heading h2 {font-size:17px;letter-spacing:.01em;margin:0}
+.subtle-button {width:32px;height:32px;border:0;border-radius:9px;background:transparent;color:var(--muted);font-size:24px}
+.subtle-button:hover {background:var(--glass-hover)}
+.language-row {min-height:49px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;margin-bottom:14px;background:var(--glass-hover)}
+.row-name {font-size:13px;font-weight:550}
+.segmented {display:flex;align-items:center;padding:3px;border:1px solid var(--line);border-radius:999px;background:var(--glass)}
+.segmented button {height:28px;min-width:42px;border:0;border-radius:999px;background:transparent;color:var(--muted);font-size:12px;transition:background .18s ease,color .18s ease}
+.segmented button.active {background:var(--glass-raised);color:var(--fg);font-weight:700;box-shadow:0 3px 10px rgba(30,67,113,.08)}
+.mode-group {border:0;margin:0;padding:0}
+.mode-group legend {margin:0 0 8px 4px;font-size:12px;color:var(--muted)}
+.mode-card {display:flex;align-items:center;gap:11px;padding:0 10px;min-height:43px;border-radius:12px;font-size:13px;cursor:pointer;transition:background .16s ease}
+.mode-card:hover,.mode-card:has(input:checked){background:var(--glass-hover)}
+.mode-card input {accent-color:var(--accent);order:3;margin-left:auto}
+.mode-swatch {display:grid;place-items:center;width:19px;height:19px;border-radius:8px;flex:none;border:1px solid var(--line);font-size:14px}
+.auto-swatch {background:linear-gradient(120deg,#eef4ff 48%,#354153 49%);color:#7194c4}
+.white-swatch {background:#fff}.black-swatch {background:#141821}.image-swatch{background:linear-gradient(125deg,#95d5df,#678cdb);color:#fff}.bing-swatch{background:linear-gradient(125deg,#45b5df,#88c8a6);color:#fff}.remote-swatch{background:linear-gradient(125deg,#adb5e6,#efc5e3);color:#fff}
+.extra-control {display:flex;flex-direction:column;gap:9px;padding:10px 5px 0}
+.extra-control label,.extra-control small {font-size:12px;color:var(--muted);line-height:1.5}
+.extra-control input[type=url] {height:41px;min-width:0;border:1px solid var(--border);border-radius:11px;background:var(--glass-raised);color:var(--fg);padding:0 11px;font-size:12px}
+.action-button {height:40px;border:1px solid var(--border);border-radius:12px;background:var(--glass-raised);color:var(--fg)}
+.action-button:hover {background:var(--glass-hover)}
+.status {min-height:0;margin:10px 4px 0;color:var(--muted);font-size:12px;line-height:1.5}
+.status.error {color:#d44552}
+.credit {position:fixed;z-index:2;left:20px;bottom:18px;margin:0;color:#fff;text-shadow:0 1px 10px #000a;max-width:60vw;font-size:11px}
+@media(max-width:820px){:root{--side-width:min(290px,calc(100vw - 35px))}body.sidebar-open .main{padding-left:20px}.search-area{width:min(620px,calc(100vw - 40px))}.search-bar{height:56px}.engine-trigger{padding:0 11px}.engine-trigger span{display:none}}
+@media(max-width:550px){.search-area{transform:translateY(-14vh)}.search-bar{gap:8px;padding-right:9px}.search-divider{height:19px}.settings-panel{right:14px}.bookmark-flyout{width:200px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after {transition-duration:.01ms!important;animation-duration:.01ms!important;scroll-behavior:auto!important}}
+
+/* Visual refinement: common continuous glass language and precise interactive origins. */
+:root { --menu-radius:17px; --inner-glass:var(--glass-raised); --menu-outline:var(--border); }
+/* Prevent horizontal scrollbar (and its bottom bar) in long bookmark menus. */
+.bookmark-flyout { width:244px; min-width:0; max-width:calc(100vw - 12px); padding:7px; border-radius:var(--menu-radius); overflow:visible; transform-origin:left 16px; }
+.flyout-scroll { display:block; max-height:min(462px,calc(100vh - 40px)); overflow-y:auto; overflow-x:hidden; scrollbar-gutter:stable; min-width:0; }
+.bookmark-flyout .bookmark-row { min-width:0; max-width:100%; }
+.bookmark-flyout .bookmark-name {min-width:0;}
+.bookmark-row { min-width:0; }
+.bookmark-row:hover { transform:none; }
+.bookmark-flyout::before {content:"";position:absolute;left:-8px;top:0;bottom:0;width:8px;pointer-events:auto;}
+/* Engine selector: one continuous control whose lower half extends out of the trigger. */
+.engine-control {z-index:12;isolation:isolate;}
+.engine-trigger {min-width:146px;justify-content:flex-start;position:relative;z-index:2;background:var(--inner-glass);border:1px solid var(--menu-outline);border-radius:999px;box-shadow:0 2px 9px rgba(26,55,85,.04);padding:0 13px;gap:8px;transition:border-radius .18s ease, background-color .2s ease,box-shadow .2s ease;}
+.engine-trigger .chevron {margin-left:auto;}
+.engine-trigger:hover,.engine-control.menu-open .engine-trigger {background:var(--inner-glass);}
+.engine-control.menu-open .engine-trigger {border-radius:23px 23px 0 0;border-bottom-color:transparent;box-shadow:none;}
+.engine-menu {z-index:1;top:calc(100% - 1px);left:0;width:100%;min-width:146px;border-radius:0 0 20px 20px;border-top:0;padding:7px 5px 6px;background:var(--inner-glass);box-shadow:0 18px 36px rgba(17,40,65,.16);transform-origin:center top;transform:translateY(-7px) scaleY(.2);clip-path:inset(0 0 85% 0 round 0 0 20px 20px);opacity:0;transition:transform .29s var(--ease),clip-path .29s var(--ease),opacity .17s ease,visibility 0s linear .29s;}
+.engine-menu.is-open {transform:translateY(0) scaleY(1);clip-path:inset(0 0 0 0 round 0 0 20px 20px);opacity:1;transition:transform .29s var(--ease),clip-path .29s var(--ease),opacity .18s ease,visibility 0s;}
+.engine-menu button {height:39px;gap:9px;padding:0 7px;border-radius:12px;font-size:13px;}
+.engine-menu button img {width:19px;height:19px;}
+.engine-menu .selected-check {font-size:15px;}
+/* A real horizontally translating language control thumb (no background jump). */
+.segmented {position:relative;isolation:isolate;display:grid;grid-template-columns:repeat(2,44px);padding:3px;background:var(--glass);border:1px solid var(--line);overflow:hidden;}
+.segmented .segment-thumb {position:absolute;left:3px;top:3px;bottom:3px;width:calc((100% - 6px)/2);border:1px solid var(--border);border-radius:999px;background:var(--glass-raised);box-shadow:0 2px 8px rgba(25,55,84,.10);z-index:0;transform:translateX(0);transition:transform .30s var(--ease);pointer-events:none;}
+.segmented[data-selected="en"] .segment-thumb {transform:translateX(100%);}
+.segmented button {position:relative;z-index:1;min-width:0;width:44px;background:transparent!important;box-shadow:none!important;color:var(--muted);transition:color .2s ease,transform .16s ease;}
+.segmented button:active {transform:scale(.93);}
+.segmented button.active {color:var(--fg);font-weight:700;}
+/* Single icon system: 24x24 Lucide-style stroked marks, no glyphs or mixed swatches. */
+.language-label {display:flex;align-items:center;gap:10px;}
+.language-label svg {width:18px;height:18px;color:var(--muted);stroke-width:1.75;}
+.mode-card {gap:12px;min-height:46px;}
+.mode-icon {display:grid;place-items:center;width:29px;height:29px;flex:none;border-radius:10px;background:var(--glass-hover);color:var(--muted);}
+.mode-icon svg {width:19px;height:19px;stroke-width:1.75;}
+.mode-card:has(input:checked) .mode-icon {color:var(--accent);background:rgba(93,142,210,.12);}
+.mode-card:has(input:checked) {background:var(--glass-hover);}
+:root[data-theme="photo"] {--glass:rgba(223,236,250,.75);--glass-raised:rgba(237,246,255,.88);--glass-hover:rgba(255,255,255,.35);}
+@media(prefers-reduced-motion:reduce){.segment-thumb {transition:none!important}}
+
+/* Attached nested flyouts expand out of the hovered row in either direction. */
+.bookmark-flyout {transform-origin:left var(--anchor-y,16px);}
+.bookmark-flyout[data-side="left"] {transform-origin:right var(--anchor-y,16px);}
+.bookmark-flyout[data-side="left"]:not(.open) {transform:translateX(10px) scale(.91);}
+.bookmark-flyout[data-side="left"].open {transform:translateX(0) scale(1);}
+.bookmark-flyout[data-side="left"]::before {left:auto;right:-8px;}
+
+/* Native browser-cache favicons, lazy loaded only for visible bookmark links. */
+.bookmark-icon {position:relative;}
+.bookmark-favicon {display:block;position:absolute;inset:0;width:17px;height:17px;object-fit:contain;opacity:0;transition:opacity .14s ease;}
+.bookmark-icon.has-favicon .bookmark-favicon {opacity:1;}
+.bookmark-icon.has-favicon svg {opacity:0;}
+.bing-brand-icon img {display:block;width:19px;height:19px;object-fit:contain;}
+/* Edge-to-edge cascade flyouts; no visible overlap with the parent column. */
+.bookmark-flyout {box-shadow:var(--shadow);}
+
+/* Safari-inspired bookmarks navigation: one viewport, sliding folder pages. */
+.bookmark-sidebar {display:flex;flex-direction:column;min-height:0;}
+.sidebar-heading {flex:none;padding-right:37px;}
+.bookmark-nav-header {width:100%;height:100%;min-width:0;display:flex;align-items:center;gap:8px;}
+.bookmark-nav-header h2 {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.bookmark-back {border:0;background:transparent;color:var(--accent);display:flex;align-items:center;gap:1px;min-width:0;max-width:49%;padding:7px 4px 7px 0;border-radius:9px;font-size:12px;flex:none;}
+.bookmark-back:hover {background:var(--glass-hover);}
+.bookmark-back svg {width:17px;height:17px;stroke-width:2.2;}
+.bookmark-back span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.bookmark-search {flex:none;}
+.bookmark-tree {position:relative;overflow:hidden;flex:1;min-height:0;max-height:none;padding:0;margin-top:1px;isolation:isolate;}
+.bookmark-page {background:var(--glass-raised);border-radius:13px;position:absolute;inset:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;padding:1px 2px 12px;opacity:1;transform:translateX(0);transition:transform .29s var(--ease),opacity .25s ease;will-change:transform;}
+.bookmark-page::-webkit-scrollbar {width:7px;}
+.bookmark-page::-webkit-scrollbar-thumb {background:rgba(110,130,150,.23);border-radius:10px;}
+.bookmark-page.page-from-right {transform:translateX(100%);opacity:.65;}
+.bookmark-page.page-from-left {transform:translateX(-100%);opacity:.65;}
+.bookmark-page.page-to-left {transform:translateX(-100%);opacity:.35;pointer-events:none;}
+.bookmark-page.page-to-right {transform:translateX(100%);opacity:.35;pointer-events:none;}
+.bookmark-row.folder {cursor:pointer;}
+.bookmark-row.folder:active {background:rgba(66,126,214,.12);}
+@media(prefers-reduced-motion:reduce){.bookmark-page{transition:none!important;}}
+
+/* Safari bookmarks sidebar reference pass: imitate the supplied macOS screenshot.
+   Only the sidebar is adapted; the browser chrome and the rest of the new-tab UI stay ours. */
+:root { --side-width: 350px; --safari-sidebar: rgba(245,244,247,.78); --safari-search:rgba(120,125,137,.085); --safari-highlight:rgba(117,119,130,.09); }
+:root[data-theme="dark"] { --safari-sidebar:rgba(35,38,47,.81); --safari-search:rgba(255,255,255,.10); --safari-highlight:rgba(255,255,255,.08); }
+:root[data-theme="photo"] { --safari-sidebar:rgba(245,241,242,.67); --safari-search:rgba(91,85,99,.095); --safari-highlight:rgba(255,255,255,.20); }
+/* Show the launcher only while sidebar is closed. Do not leave a second close button floating outside. */
+.bookmark-toggle,.settings-toggle {width:37px;height:37px;border-radius:50%;}
+.bookmark-toggle {left:16px;top:16px;transition:opacity .15s ease,background .2s ease,transform .2s ease;}
+body.sidebar-open .bookmark-toggle {left:16px;opacity:0;visibility:hidden;pointer-events:none;}
+.bookmark-sidebar {
+  left:0;top:0;bottom:0;width:var(--side-width);padding:0;
+  border:0;border-right:1px solid var(--line);border-radius:0;
+  background:var(--safari-sidebar);box-shadow:none;
+  backdrop-filter:blur(34px) saturate(125%);-webkit-backdrop-filter:blur(34px) saturate(125%);
+  transform-origin:left center;transform:translateX(-22px);
+  transition:transform .31s var(--ease),opacity .22s ease,visibility 0s linear .31s;
+}
+.bookmark-sidebar.is-open {transform:translateX(0);transition:transform .31s var(--ease),opacity .22s ease,visibility 0s;}
+.sidebar-heading.safari-header {
+  height:60px;min-height:60px;margin:0;padding:12px 15px 0;
+  display:flex;justify-content:flex-start;align-items:center;gap:8px;
+}
+.sidebar-heading.safari-header h2 {
+  font-size:17px;font-weight:700;line-height:1.3;letter-spacing:-.02em;
+  min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  margin:0;
+}
+.safari-round-icon {
+  display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:32px;height:32px;padding:0;border:0;border-radius:50%;
+  background:rgba(99,102,113,.095);color:var(--fg);
+  box-shadow:none;transition:background-color .15s ease,transform .16s ease;
+}
+.safari-round-icon:hover {background:rgba(100,105,118,.17);}
+.safari-round-icon:active {transform:scale(.93);}
+.safari-round-icon svg {width:18px;height:18px;stroke-width:2.2;}
+.safari-dots {stroke:none;fill:currentColor;}
+.safari-dots circle {fill:currentColor;stroke:none;}
+.bookmark-actions-wrap {position:relative;flex:none;}
+.bookmark-action-menu {
+  position:absolute;z-index:50;right:0;top:calc(100% + 7px);
+  width:175px;border:1px solid var(--border);border-radius:12px;
+  padding:5px;background:var(--glass-raised);box-shadow:var(--shadow);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+}
+.bookmark-action-menu button {
+  display:block;width:100%;text-align:left;border:0;border-radius:8px;
+  padding:10px 11px;color:var(--fg);font-size:13px;background:none;
+}
+.bookmark-action-menu button:hover {background:var(--glass-hover);}
+.bookmark-search {
+  flex:none;height:36px;min-height:36px;margin:11px 14px 8px;
+  padding:0 12px;border-radius:12px;border:0;
+  background:var(--safari-search);box-shadow:none;backdrop-filter:none;
+  gap:8px;
+}
+.bookmark-search input {font-size:13px;}
+.bookmark-search svg {width:16px;height:16px;stroke-width:1.8;}
+.safari-clear {width:25px;height:25px;display:grid;place-items:center;padding:0;border-radius:50%;}
+.safari-clear:hover {background:var(--safari-highlight);}
+.safari-clear svg {width:13px;height:13px;}
+.bookmark-tree {flex:1;min-height:0;margin:0;padding:0;overflow:hidden;position:relative;background:none;}
+.bookmark-page {
+  background:transparent;border-radius:0;padding:0 14px 22px;
+  position:absolute;inset:0;overflow-x:hidden;overflow-y:auto;
+  scrollbar-gutter:auto;
+}
+.bookmark-section-title {
+  margin:11px 7px 4px;
+  font-size:12px;font-weight:600;color:var(--muted);
+  line-height:1.5;letter-spacing:0;
+}
+.bookmark-row {
+  min-height:38px;padding:5px 8px;gap:9px;border-radius:10px;
+  transition:background-color .13s ease;
+}
+.bookmark-row:hover,.bookmark-row:focus-visible {background:var(--safari-highlight);transform:none;}
+.bookmark-row.folder {cursor:pointer;}
+.bookmark-row.link {min-height:55px;align-items:center;}
+.bookmark-icon {position:relative;width:28px;height:28px;flex:none;color:var(--muted);opacity:1;}
+.bookmark-icon.folder-icon {width:22px;height:22px;border-radius:5px;background:rgba(135,139,149,.22);color:var(--muted);}
+.bookmark-icon.folder-icon svg {width:15px;height:15px;stroke-width:1.7;}
+.bookmark-icon:not(.folder-icon) svg {width:22px;height:22px;stroke-width:1.55;}
+.bookmark-favicon {width:100%;height:100%;border-radius:5px;object-fit:contain;}
+.bookmark-text {flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;}
+.bookmark-row .bookmark-name {display:block;font-size:13px;line-height:1.35;font-weight:500;flex:none;color:var(--fg);}
+.bookmark-row.link .bookmark-name {font-weight:620;}
+.bookmark-path {display:block;font-size:11px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px;color:var(--muted);}
+.bookmark-count {font-size:12px;color:var(--muted);min-width:12px;text-align:right;}
+.bookmark-chevron {width:12px;height:12px;color:var(--muted);opacity:.82;}
+.bookmark-chevron svg {width:12px;height:12px;stroke-width:1.9;}
+.empty-note {margin:12px 8px;font-size:12px;}
+@media (max-width: 820px) { :root {--side-width:min(350px,calc(100vw - 34px));} }
+@media (max-width: 550px) { .sidebar-heading.safari-header {height:55px;min-height:55px;} }
+
+/* Unified circular icon actions across search, sidebar and settings. */
+.subtle-button {width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--safari-search);font-size:inherit;}
+.subtle-button svg {width:16px;height:16px;stroke-width:1.9;}
+/* Compact Safari spacing: header/search/groups should read as one native sidebar. */
+.sidebar-heading.safari-header {height:54px;min-height:54px;padding-top:7px;}
+.bookmark-search {margin-top:6px;margin-bottom:5px;}
+.bookmark-section-title {margin-top:7px;margin-bottom:3px;}
+.bookmark-row.folder {min-height:36px;}
+.bookmark-row.link {min-height:50px;}
+
+/* Native Safari-inspired sidebar toggle: the same split-window glyph in both states.
+   The header contains exactly one dedicated show/hide action, never an ellipsis menu. */
+.bookmark-toggle .sidebar-layout-icon,
+.safari-round-icon .sidebar-layout-icon {width:19px;height:19px;stroke-width:1.7;}
+.sidebar-heading.safari-header #bookmark-close {margin-left:auto;}
+#bookmark-close:hover {background:rgba(100,105,118,.17);}
+
+
+/* Final refinement: free/open font families are preferred; no remote font downloads. */
+:root {font-family:"Noto Sans SC","Noto Sans CJK SC","Source Han Sans SC","Noto Sans",sans-serif;font-synthesis:none;}
+button,input {font-family:inherit;}
+
+/* Precise corner symmetry. Settings now shares the top baseline with sidebar toggle. */
+.settings-toggle {top:16px;right:16px;bottom:auto;left:auto;}
+.settings-panel {top:68px;right:16px;bottom:auto;max-height:calc(100vh - 88px);transform-origin:calc(100% - 20px) -28px;transform:translate(0,-9px) scale(.22,.11);}
+.settings-panel.is-open {transform:translate(0,0) scale(1);}
+
+/* One continuous, compact engine picker, grown from its own capsule. */
+.search-area {width:min(690px,calc(100vw - 44px));}
+.search-combo {width:100%;height:58px;isolation:isolate;}
+.search-combo .search-bar {
+  display:flex;align-items:center;width:100%;height:58px;min-width:0;
+  padding:5px 14px 5px 5px;gap:11px;border-radius:999px;
+  background:var(--glass-raised);overflow:visible;position:relative;
+}
+.search-combo .search-bar:focus-within {box-shadow:var(--shadow);}
+.engine-control {
+  --engine-menu-height:116px;
+  --engine-label-size:13px;
+  --engine-label-weight:600;
+  --engine-label-line-height:18px;
+  align-self:stretch;position:relative;z-index:25;isolation:isolate;
+  flex:none;width:124px;min-width:124px;
+}
+/* A single material and outline expands, so no overlap line or mismatched card edge. */
+.engine-control::after {content:none;}
+.engine-control::before {
+  content:"";position:absolute;z-index:0;left:0;top:0;width:100%;height:100%;
+  border:1px solid transparent;border-radius:23px;
+  background:var(--glass-hover);pointer-events:none;box-shadow:none;
+  transition:height .30s cubic-bezier(.2,.75,.25,1),
+             background-color .2s ease,box-shadow .3s ease,border-color .2s ease;
+}
+.engine-control:hover::before {background:rgba(128,159,195,.18);}
+.engine-control.menu-open::before {
+  height:calc(100% + var(--engine-menu-height) - 1px);
+  /* Never animate the top edge: its rounded shape remains pixel-stable. */
+  background:var(--glass-raised);border-color:var(--border);
+  box-shadow:0 17px 36px rgba(22,44,74,.15);
+}
+.engine-control .engine-trigger {
+  display:flex;align-items:center;justify-content:flex-start;
+  width:100%;min-width:0;height:100%;gap:6px;padding:0 10px;
+  color:var(--fg);background:transparent;border:0;border-radius:999px;
+  font-size:var(--engine-label-size);font-weight:var(--engine-label-weight);
+  line-height:var(--engine-label-line-height);letter-spacing:normal;
+  box-shadow:none;position:relative;z-index:2;
+  transition:color .2s ease;
+}
+.engine-control .engine-trigger:hover,.engine-control.menu-open .engine-trigger {
+  background:transparent;border:0;box-shadow:none;
+}
+.engine-control .engine-trigger img {width:19px;height:19px;flex:none;object-fit:contain;}
+.engine-control .engine-trigger span {flex:1;min-width:0;white-space:nowrap;text-align:left;}
+.engine-control .engine-trigger .chevron {
+  width:13px;height:13px;flex:none;margin-left:0;
+  transition:transform .29s var(--ease);
+}
+.engine-control.menu-open .chevron {transform:rotate(180deg);}
+/* Rows are clipped into view within the expanding backplate. */
+.engine-control .engine-menu {
+  position:absolute;left:0;top:calc(100% - 1px);z-index:2;
+  box-sizing:border-box;width:100%;min-width:0;height:var(--engine-menu-height);
+  display:flex;flex-direction:column;gap:2px;padding:3px 5px 7px;
+  background:transparent;border:0;border-radius:0 0 18px 18px;
+  box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;
+  visibility:hidden;opacity:1;pointer-events:none;
+  clip-path:inset(0 0 100% 0);transform:none;transform-origin:center top;
+  transition:clip-path .30s cubic-bezier(.2,.75,.25,1),visibility 0s linear .30s;
+}
+.engine-control .engine-menu.is-open {
+  visibility:visible;opacity:1;pointer-events:auto;
+  clip-path:inset(0 0 0 0);
+  transition:clip-path .30s cubic-bezier(.2,.75,.25,1),visibility 0s;
+}
+.engine-control .engine-menu button {
+  flex:none;height:34px;min-height:34px;width:100%;
+  display:flex;align-items:center;gap:6px;padding:0 5px;
+  border:0;border-radius:10px;text-align:left;
+  color:var(--fg);background:transparent;
+  font-size:var(--engine-label-size);font-weight:var(--engine-label-weight);
+  line-height:var(--engine-label-line-height);letter-spacing:normal;
+}
+.engine-control .engine-menu button img {width:19px;height:19px;flex:none;object-fit:contain;}
+.engine-control .engine-menu button span {min-width:0;flex:1;text-align:left;}
+.engine-control .engine-menu button:hover,
+.engine-control .engine-menu button[aria-checked="true"] {background:var(--glass-hover);}
+.engine-control .engine-menu .selected-check {
+  display:block;width:14px;height:14px;flex:none;margin-left:0;
+  color:var(--accent);stroke-width:1.9;opacity:0;visibility:hidden;transform:none;
+}
+.engine-control .engine-menu [aria-checked="true"] .selected-check {opacity:1;visibility:visible;}
+.search-divider {width:1px;height:21px;background:var(--line);flex:none;}
+/* Keep the existing Safari sidebar readability correction. */
+.bookmark-row .bookmark-name {font-size:14px;line-height:1.35;font-weight:500;letter-spacing:0;}
+.bookmark-row.link .bookmark-name {font-weight:600;}
+.bookmark-path {font-size:12px;line-height:1.4;margin-top:3px;color:var(--muted);}
+.bookmark-icon {opacity:1;}
+.bookmark-page {will-change:auto;transform:none;}
+.bookmark-page.page-from-right,.bookmark-page.page-from-left,.bookmark-page.page-to-left,.bookmark-page.page-to-right {will-change:transform;}
+.bookmark-favicon {width:18px;height:18px;top:50%;left:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);object-fit:contain;border-radius:3px;opacity:0;transition:opacity .12s ease;}
+.bookmark-icon.has-favicon .bookmark-favicon {opacity:1;}
+@media(max-width:820px) {
+  .search-combo,.search-combo .search-bar {height:54px;}
+  .engine-control {width:121px;min-width:121px;}
+  .search-combo .search-bar {gap:10px;}
+}
+@media(max-width:550px) {
+  .search-area {width:min(620px,calc(100vw - 28px));}
+  .engine-control {width:112px;min-width:112px;}
+  .engine-control {--engine-label-size:12px;}
+  .engine-control .engine-trigger {padding:0 8px;gap:5px;}
+  .engine-control .engine-menu {width:100%;}
+  .search-combo .search-bar {gap:8px;padding-right:9px;}
+  .settings-panel {right:12px;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .engine-control .engine-menu,.engine-control .engine-trigger,.engine-control .chevron {transition:none!important;}
+}
+/* The selector click must not fake search-field focus or flash the submit arrow. */
+.search-combo .search-bar:focus-within {box-shadow:var(--shadow);}
+.search-combo .search-bar:has(#query:focus) {box-shadow:var(--shadow),0 0 0 3px rgba(73,126,225,.12);}
+/* The submit button is deliberately always visible and does not depend on focus. */
+
+/* The browser favicon is the visual: do not give every brand a grey badge.
+   Only a detected transparent monochrome glyph receives its own contrast tile.
+   Browser fallback globe always follows the sidebar theme via --muted. */
+.bookmark-icon:not(.folder-icon) {
+  width:27px;height:27px;display:grid;place-items:center;
+  border:0;border-radius:7px;background:transparent;box-shadow:none;
+  opacity:1;color:var(--muted);
+}
+.bookmark-icon:not(.folder-icon) svg {width:19px;height:19px;stroke-width:1.7;}
+.bookmark-icon .bookmark-favicon {
+  width:19px;height:19px;border-radius:3px;background:transparent;filter:none;
+}
+.bookmark-icon.favicon-dark-ink {
+  background:rgba(255,255,255,.91);
+  box-shadow:0 0 0 1px rgba(35,45,62,.12);
+}
+.bookmark-icon.favicon-light-ink {
+  background:rgba(32,40,52,.86);
+  box-shadow:0 0 0 1px rgba(255,255,255,.12);
+}
+/* Backplate corner radius is fixed at 23px; only its height may grow. */
+
+/* Baidu ships with its own white-background tile in the supplied favicon. */
+
+@media(max-width:550px){.search-round-button {width:34px;height:34px}}
+@media(prefers-reduced-motion:reduce){.search-round-button{transition:none!important}}
+/* Never let the search box overrun its centered grid cell on narrow viewports. */
+.search-area {max-width:100%;}
+.main {grid-template-columns:minmax(0,1fr);}
+.search-area {width:min(690px,100%);justify-self:center;}
+
+
+/* Reference-locked search surface, matching the approved sample screenshot.
+   Keep visual styling scoped to this component; text search only; no attachment or upload controls. */
+:root {
+  --search-shell:rgba(246,246,246,.96);
+  --search-shell-edge:rgba(227,227,227,.60);
+  --search-cell:#fff;
+  --search-cell-fg:#202124;
+  --search-cell-hint:#929292;
+  --search-action:#ebebeb;
+  --search-action-hover:#dedede;
+  --search-action-fg:#232323;
+  --search-action-idle:#848484;
+}
+:root[data-theme="dark"] {
+  --search-shell:rgba(31,35,42,.92);
+  --search-shell-edge:rgba(255,255,255,.085);
+  --search-cell:#292e37;
+  --search-cell-fg:#f3f4f6;
+  --search-cell-hint:#a0a7b3;
+  --search-action:#383e49;
+  --search-action-hover:#484f5d;
+  --search-action-fg:#f4f4f5;
+  --search-action-idle:#b7beca;
+}
+:root[data-theme="photo"] {
+  --search-shell:rgba(246,246,246,.91);
+  --search-shell-edge:rgba(255,255,255,.42);
+  --search-cell:rgba(255,255,255,.96);
+  --search-cell-fg:#202124;
+  --search-cell-hint:#929292;
+  --search-action:rgba(229,229,229,.95);
+  --search-action-hover:rgba(214,214,214,.97);
+  --search-action-fg:#232323;
+  --search-action-idle:#818181;
+}
+.search-combo {height:48px;}
+.search-combo .search-bar {
+  height:48px;
+  padding:5px 6px;
+  gap:8px;
+  border-radius:999px;
+  background:var(--search-shell);
+  border:1px solid var(--search-shell-edge);
+  box-shadow:none;
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+}
+.search-combo .search-bar:focus-within {box-shadow:none;}
+.search-combo .search-bar:has(#query:focus) {box-shadow:none;}
+.engine-control {
+  width:94px;
+  min-width:94px;
+  --engine-label-size:13px;
+  --engine-label-weight:500;
+}
+.engine-control::before {
+  background:var(--search-cell);
+  border-radius:999px;
+  border:0;
+}
+.engine-control:hover::before {background:var(--search-cell);}
+.engine-control.menu-open::before {
+  background:var(--search-cell);
+  border:1px solid var(--search-shell-edge);
+  border-radius:19px;
+  box-shadow:0 10px 25px rgba(0,0,0,.12);
+}
+.engine-control .engine-trigger {padding:0 9px;gap:5px;color:var(--search-cell-fg);}
+.engine-control .engine-trigger img {width:15px;height:15px;}
+.engine-control .engine-trigger .chevron {width:12px;height:12px;color:var(--search-action-idle);}
+.engine-control .engine-menu button {font-weight:500;color:var(--search-cell-fg);gap:5px;padding:0 4px;}
+.engine-control .engine-menu button img {width:15px;height:15px;}
+.engine-control .engine-menu button:hover,
+.engine-control .engine-menu button[aria-checked="true"] {background:var(--search-action);}
+#query {
+  height:36px;
+  min-height:0;
+  flex:1;
+  padding:0 13px;
+  border-radius:11px;
+  background:var(--search-cell);
+  color:var(--search-cell-fg);
+  font-size:13px;
+  box-shadow:none;
+}
+#query::placeholder {color:var(--search-cell-hint);opacity:1;}
+.search-round-button,
+.search-submit:disabled,
+.search-submit:not(:disabled) {
+  width:34px;height:34px;
+  background:var(--search-action);
+  border:0;
+  border-radius:50%;
+  box-shadow:none;
+  color:var(--search-action-fg);
+  opacity:1;
+}
+.search-round-button svg {width:18px;height:18px;stroke-width:2.25;}
+.search-round-button:not(:disabled):hover,
+.search-submit:not(:disabled):hover {background:var(--search-action-hover);color:var(--search-action-fg);}
+.search-submit:disabled {color:var(--search-action-idle);}
+.search-submit:not(:disabled) {color:var(--search-action-fg);}
+@media (max-width:820px) {
+  .search-combo,.search-combo .search-bar {height:48px;}
+  .engine-control {width:94px;min-width:94px;}
+  .search-combo .search-bar {gap:8px;}
+}
+@media (max-width:550px) {
+  .engine-control {width:87px;min-width:87px;--engine-label-size:12px;}
+  .engine-control .engine-trigger {padding:0 7px;gap:4px;}
+  .search-combo .search-bar {gap:6px;padding:5px;}
+  .search-round-button {width:34px;height:34px;}
+  #query {padding-inline:9px;}
+}
+
+
+/* 2026-10 UI regression: keep the approved search structure, increase scale ~6%. */
+.search-area {width:min(724px,100%);}
+.search-combo,.search-combo .search-bar {height:51px;}
+.search-combo .search-bar {padding:5px 7px;gap:9px;}
+.engine-control {width:99px;min-width:99px;--engine-label-size:13.5px;}
+.engine-control .engine-trigger img {width:16px;height:16px;}
+.engine-control .engine-menu button img {width:16px;height:16px;}
+#query {height:39px;font-size:14px;}
+.search-round-button,.search-submit:disabled,.search-submit:not(:disabled) {width:36px;height:36px;}
+.search-round-button svg {width:19px;height:19px;}
+@media(max-width:820px) {
+ .search-combo,.search-combo .search-bar {height:51px;}
+ .engine-control {width:99px;min-width:99px;}
+ .search-combo .search-bar {gap:9px;}
+}
+@media(max-width:550px) {
+ .engine-control {width:90px;min-width:90px;--engine-label-size:12px;}
+ .engine-control .engine-trigger {padding:0 7px;gap:4px;}
+ .search-combo .search-bar {gap:6px;padding:5px;}
+ .search-round-button,.search-submit:disabled,.search-submit:not(:disabled) {width:35px;height:35px;}
+ #query {padding-inline:9px;}
+}
+/* Eliminate the reintroduced menu top-edge jump: identical upper geometry
+   (radius, border thickness, placement, fill) through the height animation. */
+.engine-control::before,
+.engine-control.menu-open::before {
+  border:1px solid var(--search-shell-edge);
+  border-radius:19px;
+  background:var(--search-cell);
+  transition:height .30s cubic-bezier(.2,.75,.25,1),box-shadow .3s ease;
+}
+.engine-control:hover::before {background:var(--search-cell);}
+.engine-control.menu-open::before {box-shadow:0 10px 25px rgba(0,0,0,.12);}
+.engine-control .engine-menu {transition:clip-path .30s cubic-bezier(.2,.75,.25,1),visibility 0s linear .30s;}
+/* Top-left bookmarks / top-right settings: same neutral action material. */
+.bookmark-toggle,.settings-toggle {
+ width:44px;height:44px;border-radius:50%;
+ background:var(--search-action);color:var(--search-action-fg);
+ border:1px solid var(--search-shell-edge);
+ box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;
+ transition:background-color .18s ease,transform .18s var(--ease),opacity .15s ease;
+}
+.bookmark-toggle:hover,.settings-toggle:hover {background:var(--search-action-hover);}
+.bookmark-toggle:active,.settings-toggle:active {transform:scale(.96);}
+/* Keep the selected engine readable even in narrow responsive layouts. */
+@media(max-width:820px){.engine-control .engine-trigger span{display:block;}}
+
+/* Lazy search suggestions: positioned outside the form to prevent search capsule reflow. */
+.search-combo {position:relative;}
+.search-suggestions {
+  position:absolute;z-index:14;top:calc(100% + 9px);left:0;right:0;
+  padding:6px;max-height:min(332px,calc(100vh - 125px));overflow-y:auto;
+  border:1px solid var(--search-shell-edge);border-radius:18px;
+  background:var(--search-cell);color:var(--search-cell-fg);
+  box-shadow:0 13px 34px rgba(0,0,0,.13);overscroll-behavior:contain;
+}
+.suggestion-item {display:flex;align-items:center;width:100%;min-height:42px;gap:11px;
+  padding:7px 11px;border:0;border-radius:11px;background:transparent;
+  color:inherit;text-align:left;font-size:13px;cursor:pointer;}
+.suggestion-item:hover,.suggestion-item[aria-selected="true"] {background:var(--search-action);}
+.suggestion-icon {display:grid;place-items:center;width:17px;min-width:17px;color:var(--search-action-idle);}
+.suggestion-icon svg {width:17px;height:17px;}
+.suggestion-title {flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.suggestion-label {flex:none;color:var(--search-cell-hint);font-size:11px;}
+.suggest-pref-row {display:flex;justify-content:space-between;align-items:center;min-height:43px;
+  padding:0 10px;margin-bottom:12px;color:var(--fg);font-size:13px;cursor:pointer;}
+.suggest-pref-row input {accent-color:var(--accent);width:17px;height:17px;cursor:pointer;}
+@media(max-width:550px){.suggestion-item {min-height:43px;gap:7px;padding-inline:9px;}.suggestion-label{font-size:10px;}}
