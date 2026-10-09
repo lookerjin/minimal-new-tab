@@ -186,3 +186,11 @@ python -m pytest -q tests/test_search_ui.py
 - **安全边界**：只自动访问明确的 HTTP(S) 地址；含空格、账号密码、非 HTTP(S) scheme、异常端口等依旧按文本搜索处理。对 `node.js` 等语义与域名形式重合的输入可显式选择搜索。
 
 本地验证：`node --test tests/search-core.test.cjs`、`python -m pytest -q tests/`。浏览器测试模拟 Chrome 扩展 API 与网络响应，真实 Edge 需验收。
+
+
+## v1.5.6 设置控件细化
+
+- 搜索引擎下拉菜单顺序调整为 Google → Bing → Baidu，保留原有配置值和切换逻辑。
+- 在线搜索建议改为小型滑动开关；背景模式采用选中行高亮 + 右侧勾选标记，未选项不再显示原生单选圆圈。
+- 原生 checkbox/radio 保留在 DOM 中，原有同步、键盘操作、屏幕阅读器语义和焦点反馈保持不变。
+- CSS 适配明暗主题及系统减少动效设置；无额外脚本、网络请求或运行时依赖。

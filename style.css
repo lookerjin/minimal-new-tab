@@ -737,3 +737,50 @@ button,input {font-family:inherit;}
   .search-combo::before,.search-combo .search-suggestions,
   .search-combo .suggestion-ghost-layer,.search-combo .suggestion-item { transition:none!important; animation:none!important; }
 }
+
+
+/* v1.5.6 — Settings controls: quiet, native-feeling visuals, native input semantics. */
+.suggest-pref-row {position:relative;border-radius:12px;transition:background-color .18s ease;}
+.suggest-pref-row:hover {background:var(--glass-hover);}
+.suggest-pref-row input[type="checkbox"],
+.mode-card input[type="radio"] {
+  /* An invisible native control covers the whole row: large pointer target, real keyboard semantics. */
+  position:absolute;inset:0;z-index:1;width:100%;height:100%;margin:0;padding:0;
+  opacity:0;cursor:pointer;
+}
+.suggest-pref-row:has(input:focus-visible),
+.mode-card:has(input:focus-visible) {
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+.suggest-toggle-track {
+  position:relative;display:block;flex:none;width:39px;height:23px;
+  margin-left:auto;border-radius:999px;
+  background:rgba(121,138,157,.28);border:1px solid rgba(99,122,148,.12);
+  box-shadow:inset 0 1px 2px rgba(20,40,65,.08);
+  transition:background-color .24s var(--ease),border-color .24s ease;
+}
+.suggest-toggle-thumb {
+  position:absolute;left:2px;top:2px;width:17px;height:17px;
+  border-radius:50%;background:#fff;
+  box-shadow:0 1px 3px rgba(17,38,64,.20);
+  transition:transform .24s var(--ease);
+}
+.suggest-pref-row input:checked + .suggest-toggle-track {
+  background:var(--accent);border-color:transparent;
+}
+.suggest-pref-row input:checked + .suggest-toggle-track .suggest-toggle-thumb {
+  transform:translateX(16px);
+}
+.mode-card {position:relative;}
+.mode-selection {
+  display:grid;place-items:center;flex:none;margin-left:auto;
+  width:23px;height:23px;border-radius:50%;
+  color:var(--accent);background:rgba(93,142,210,.12);
+  opacity:0;transform:scale(.82);
+  transition:opacity .18s ease,transform .24s var(--ease);
+}
+.mode-selection svg {width:14px;height:14px;stroke-width:2.6;}
+.mode-card:has(input:checked) .mode-selection {opacity:1;transform:scale(1);}
+@media(prefers-reduced-motion:reduce) {
+  .suggest-toggle-track,.suggest-toggle-thumb,.mode-selection {transition:none!important;}
+}
