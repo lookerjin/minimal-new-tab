@@ -12,7 +12,12 @@
   combo.append(ghostLayer);
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const PANEL_DURATION = 300; // Matches the search-engine capsule expansion.
+  const SHRINK_IDLE_MS = 180; // Delay shrinking while the user is still typing.
   let hideTimer = null;
+  let shrinkTimer = null;
+  let panelHeight = 0;
+  let lastEditAt = 0;
+  let providersSettled = true; // Only the final merged candidate set may shrink the shell.
   const MAX_ITEMS = 6;
   const MAX_BOOKMARK_CANDIDATES = 80;
   const MAX_DIAGNOSTIC_SAMPLES = 40;
@@ -89,10 +94,39 @@
   const panelOpen = () => combo.classList.contains('is-suggesting');
   function setPanelHeight(height) {
     // The search capsule stays at its original size; only its single backplate grows.
+    panelHeight = height;
     combo.style.setProperty('--suggestion-height', `${height}px`);
     list.style.height = `${height}px`;
   }
+  function cancelShrink() {
+    clearTimeout(shrinkTimer);
+    shrinkTimer = null;
+  }
+  function measuredHeight() {
+    const available = Math.max(0, window.innerHeight - list.getBoundingClientRect().top - 12);
+    const content = [...list.children].reduce((sum, row) => sum + row.offsetHeight, 0) + 16;
+    return Math.min(content, 332, available);
+  }
+  function resizePanel(target, immediate = false) {
+    cancelShrink();
+    if (immediate || target >= panelHeight) {
+      setPanelHeight(target);
+      return;
+    }
+    // Local history/bookmarks and remote suggestions resolve at different times.
+    // Never contract for a partial batch, only the final merged candidate set.
+    if (!providersSettled) return;
+    // After the providers settle, still wait for the typing-idle window.
+    const wait = Math.max(0, SHRINK_IDLE_MS - (performance.now() - lastEditAt));
+    if (!wait) { setPanelHeight(target); return; }
+    const token = generation;
+    shrinkTimer = setTimeout(() => {
+      shrinkTimer = null;
+      if (token === generation && panelOpen() && items.length) setPanelHeight(measuredHeight());
+    }, wait);
+  }
   function hide() {
+    cancelShrink();
     // Keep outgoing rows inside the shrinking backplate until the animation finishes.
     input.setAttribute('aria-expanded', 'false');
     input.removeAttribute('aria-activedescendant');
@@ -116,6 +150,7 @@
   }
   function close() {
     generation++;
+    providersSettled = true;
     dismissed = true;
     abortWork();
     selected = -1;
@@ -161,9 +196,18 @@
     });
     return button;
   }
-  function draw() {
-    if (dismissed || !currentText || document.activeElement !== input || !items.length) {
+  function draw(immediateShrink = false) {
+    if (dismissed || !currentText || document.activeElement !== input) {
       hide();
+      return;
+    }
+    // An empty intermediate snapshot must not collapse an already-open capsule.
+    // The last result will decide whether an empty query needs closing.
+    if (!items.length && !panelOpen()) return;
+    if (!items.length && !list.children.length) {
+      // Provider snapshots can repeatedly be empty; do not restart outgoing-row fades.
+      if (immediateShrink) setPanelHeight(Math.min(panelHeight,
+        Math.max(0, window.innerHeight - list.getBoundingClientRect().top - 12)));
       return;
     }
     clearTimeout(hideTimer);
@@ -175,15 +219,20 @@
       for (const row of list.children) before.set(row.dataset.key, row.getBoundingClientRect());
     }
     const nextKeys = new Set(items.map(keyFor));
-    ghostLayer.replaceChildren();
+    // Incoming provider snapshots must not prematurely cancel an outgoing fade.
+    for (const ghost of ghostLayer.children) {
+      if (nextKeys.has(ghost.dataset.key)) ghost.remove();
+    }
+    const fadingKeys = new Set([...ghostLayer.children].map(node => node.dataset.key));
     if (!opening && !reduceMotion.matches) {
       const layerTop = list.getBoundingClientRect().top;
       for (const [key, row] of existing) {
-        if (nextKeys.has(key)) continue;
+        if (nextKeys.has(key) || fadingKeys.has(key)) continue;
         const rect = before.get(key);
         if (!rect) continue;
         const ghost = row.cloneNode(true);
         ghost.className = 'suggestion-ghost';
+        ghost.dataset.key = key;
         ghost.removeAttribute('role');
         ghost.removeAttribute('id');
         ghost.setAttribute('aria-hidden', 'true');
@@ -219,19 +268,27 @@
     });
     list.replaceChildren(fragment);
     list.hidden = false;
-    list.inert = false;
-    list.setAttribute('aria-hidden', 'false');
+    list.inert = !items.length;
+    list.setAttribute('aria-hidden', String(!items.length));
+    if (!items.length) {
+      // Outdated rows are gone and cannot be clicked or selected; the outer
+      // surface remains stable until the replacement providers settle.
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+      document.dispatchEvent(new Event('newtab-suggestion-selection-changed'));
+      if (immediateShrink) setPanelHeight(Math.min(panelHeight,
+        Math.max(0, window.innerHeight - list.getBoundingClientRect().top - 12)));
+      return;
+    }
     // Max 6 rows; scroll if the viewport is too short for all of them.
-    const available = Math.max(0, window.innerHeight - list.getBoundingClientRect().top - 12);
-    const contentHeight = [...list.children].reduce((sum, row) => sum + row.offsetHeight, 0) + 16;
-    const targetHeight = Math.min(contentHeight, 332, available);
+    const targetHeight = measuredHeight();
     // When the dropdown has never been laid out, let the browser paint 0 -> target.
     if (opening) {
       setPanelHeight(0);
       combo.classList.add('is-suggesting');
       void combo.offsetHeight;
     }
-    setPanelHeight(targetHeight);
+    resizePanel(targetHeight, immediateShrink);
     input.setAttribute('aria-expanded', 'true');
     updateActive();
     if (reduceMotion.matches) return;
@@ -397,8 +454,12 @@
     currentText = input.value.trim().slice(0, 160);
     dismissed = false;
     items = [];
+    cancelShrink();
+    providersSettled = false;
     // Changing settings without focusing the search field must not leak an old query.
     if (!currentText || composing || document.activeElement !== input) { hide(); return; }
+    lastEditAt = performance.now();
+    if (panelOpen()) draw(); // Clear stale, clickable candidates without closing the shell.
     const controller = new AbortController();
     activeRequest = controller;
     let localCount = 0;
@@ -427,6 +488,18 @@
       if (sample.firstOnlineMs === null && candidates.some(item => item.type === 'online')) sample.firstOnlineMs = elapsed;
     }).then(() => {
       if (token !== generation || controller.signal.aborted) return;
+      providersSettled = true;
+      if (items.length && panelOpen()) resizePanel(measuredHeight());
+      if (!items.length && panelOpen()) {
+        // All providers have finished: this is a genuine no-result state,
+        // not a temporary gap between history and bookmark responses.
+        cancelShrink();
+        const wait = Math.max(0, SHRINK_IDLE_MS - (performance.now() - lastEditAt));
+        shrinkTimer = setTimeout(() => {
+          shrinkTimer = null;
+          if (token === generation && !items.length && panelOpen()) hide();
+        }, wait);
+      }
       diagnosticSamples.push(sample);
       if (diagnosticSamples.length > MAX_DIAGNOSTIC_SAMPLES) diagnosticSamples.shift();
     });
@@ -456,7 +529,7 @@
     if (!list.contains(event.target) && event.target !== input) close();
   });
   document.addEventListener('newtab-locale-changed', draw);
-  window.addEventListener('resize', () => { if (panelOpen()) draw(); });
+  window.addEventListener('resize', () => { if (panelOpen()) draw(true); });
   list.inert = true;
   list.setAttribute('aria-hidden', 'true');
   window.NewTabSuggest = Object.freeze({

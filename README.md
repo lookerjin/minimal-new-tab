@@ -194,3 +194,49 @@ python -m pytest -q tests/test_search_ui.py
 - 在线搜索建议改为小型滑动开关；背景模式采用选中行高亮 + 右侧勾选标记，未选项不再显示原生单选圆圈。
 - 原生 checkbox/radio 保留在 DOM 中，原有同步、键盘操作、屏幕阅读器语义和焦点反馈保持不变。
 - CSS 适配明暗主题及系统减少动效设置；无额外脚本、网络请求或运行时依赖。
+
+
+## v1.5.7 稳定性修复（不新增功能）
+
+- **设置同步失败回滚**：搜索引擎、语言和背景模式仍即时显示最新选择，但如果 `chrome.storage.sync.set` 失败，恢复到最后成功保存的状态。连续修改时写入按操作顺序执行，旧请求失败不会撤销新选择。
+- **同步事件隔离**：过滤本页 `storage.onChanged` 的写入回声；本地设置写入期间优先保留用户当前选择，在空闲时仍能响应其他设备的同步变更。
+- **壁纸异步取消**：切换背景、重新选图或取消待选图片会使旧的读取/解码操作失效，旧图片不会在稍后覆盖当前选择。
+- **缓存回滚**：本地/远程图片的新缓存写入与设置保存按顺序处理；若保存失败或操作被取消，会尽力恢复此前缓存，避免下次打开时显示未成功保存的图片。
+- **保留现有体验**：不改变搜索建议、Frecency、300ms 动画、控件视觉或扩展权限。
+
+新增 `tests/test_settings_races.py`，覆盖存储异常、快速多次修改、浏览器同步事件、延迟解码、缓存写入中取消与失败回滚。测试中浏览器 API 与图片解码均可控地模拟；仍需在真实 Edge 扩展环境验收 IndexedDB 与跨设备同步。
+
+
+## v1.5.8 搜索建议稳定展开（不新增功能）
+
+- **输入与退格过程中保持面板稳定**：已展开的胶囊不再因为历史候选暂时为空就立刻收起；等待书签/在线 Provider 返回时保持外壳，候选更新后继续在原面板显示。
+- **异步空结果防抖**：只有本次请求的全部 Provider 结束且没有候选，才在至少 180ms 输入稳定窗口之后关闭；清空、Esc、失焦仍立即开始原有的 300ms 收起动画。
+- **非对称高度变化**：候选增加立即伸展；减少时等最后一次输入起约 180ms 再向下调整，连续退格会刷新等待时机；仍保留原来的 300ms 缓动曲线。
+- **保留退场过渡**：Provider 连续通知不再中途删除未完成的候选淡出幽灵行；旧候选一旦失效就不能点击、不能作为回车目标。
+- **无性能与隐私成本扩张**：没有第三方依赖、扩展权限或新网络请求；`prefers-reduced-motion` 与小窗口滚动照旧工作。
+
+新增 `tests/test_suggestion_stability.py`，模拟仅书签有结果、在线建议延迟 460ms、连续退格、大小变化、清空和 Esc；这些测试在 Chromium 注入模拟扩展 API，不替代真实 Edge 安装验收。
+
+
+## v1.5.9 搜索提交确认与引擎流光（轻量交互）
+
+- **立即确认**：按 Enter 或点击提交时，右侧箭头做 220ms 的轻微按压反馈；同时取消未完成的搜索建议请求、关闭候选面板。
+- **局部流光**：仅在通过 Google / Bing / Baidu 搜索时，当前搜索引擎胶囊外侧出现约 2px 的短弧流光。CSS 延迟 100ms 才启动，绕胶囊约 1.25s 一圈。直接访问 URL 不显示引擎流光。
+- **无导航延迟**：仍在当前 submit 回调中同步调用 `location.assign()`，没有等待动画、帧调度或网络；浏览器可能在离开扩展页前绘制部分或全部动画。
+- **兼容性**：适配明暗主题、窄屏和 `prefers-reduced-motion`（不旋转）；用户继续编辑或页面从往返缓存恢复时清除提交状态。
+- **无额外权限或依赖**：仅使用现有 DOM 类名、CSS 渐变和动画，不发起额外网络连接；网络阶段延迟不会因此降低。
+
+新增 `tests/test_submit_feedback.py`：Chromium 模拟导航、URL/搜索路径、延迟流光、主题和减动效。真实 Edge 的跨站导航反馈仍需手动体验。
+
+## v1.5.10 统一导航流光与双语搜索提示
+
+- 搜索栏默认占位文案：中文「搜索或输入 Web 地址」，英文「Search or enter a web address」；设置中切换语言后立即更新，输入框无障碍名称保持一致。
+- 直接输入 `github.com` / `localhost:3000`，或选择书签网址后提交，也使用现有左侧引擎胶囊的延迟细线流光；它表示「已发起页面导航」，并不表示网址是通过搜索引擎打开的。
+- 普通关键词搜索和搜索建议中强制搜索保留原有行为；同步调用 `location.assign()`，不为动画增加等待、权限或网络请求。
+- 跳转失败后继续输入或从往返缓存返回仍会清除反馈状态；减少动效时显示静态描边。
+
+### v1.5.11 — Mixed-source backspace stability
+
+- Keep suggestion panel height stable while history, bookmarks, and online suggestion providers are still settling. Partial candidate snapshots can add rows immediately, but cannot contract the capsule.
+- After all providers settle, shrink to the final candidate count using the existing input-idle delay; clearing the input, Escape, or blur still closes immediately.
+- The same behavior applies when reduced motion is enabled. No changes to ranking, navigation, remote requests, or permissions.

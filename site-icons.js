@@ -14,12 +14,5 @@ const BrowserFavicons = (() => {
       return resource.href;
     } catch (_) { return null; }
   }
-  function attach(image, pageURL, fallback) {
-    const iconURL = urlFor(pageURL, 32);
-    if (!iconURL) { if (fallback) image.src = fallback; return false; }
-    if (fallback) image.addEventListener('error', () => { image.src = fallback; }, {once:true});
-    image.src = iconURL;
-    return true;
-  }
-  return Object.freeze({urlFor, attach});
+  return Object.freeze({urlFor});
 })();

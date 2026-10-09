@@ -15,6 +15,7 @@ def setup(page):
     page.evaluate('''() => {
       const values = new Map();
       window.__saved = [];
+      window.__storageListeners = [];
       Object.defineProperty(window, 'localStorage', {configurable: true, value: {
         getItem: key => values.has(key) ? values.get(key) : null,
         setItem: (key, value) => values.set(key, String(value))
@@ -22,7 +23,7 @@ def setup(page):
       window.chrome = {
         storage: {
           sync: {get: async () => ({}), set: async obj => {window.__saved.push(obj.newTabPrefs)}},
-          onChanged: {addListener: () => {}}
+          onChanged: {addListener: listener => window.__storageListeners.push(listener)}
         },
         bookmarks: {getTree: async () => [{children:[]}], search: async () => []},
         permissions: {request: async () => true},

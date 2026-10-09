@@ -35,11 +35,7 @@ svg {width:20px;height:20px;stroke:currentColor;stroke-width:1.8;stroke-linecap:
 .glass-button:hover {background:var(--glass-raised)}
 /* The SAME button lives in both states. Position & icon morph; never duplicate it. */
 .bookmark-toggle {position:fixed;z-index:40;left:20px;top:20px;transform-origin:center}
-.toggle-close-icon {position:absolute;opacity:0;transform:rotate(-65deg) scale(.65);transition:transform .28s var(--ease),opacity .18s ease}
-.toggle-open-icon {transition:transform .28s var(--ease),opacity .18s ease}
 body.sidebar-open .bookmark-toggle {left:calc(16px + var(--side-width) - 21px)}
-body.sidebar-open .toggle-open-icon {opacity:0;transform:rotate(65deg) scale(.65)}
-body.sidebar-open .toggle-close-icon {opacity:1;transform:rotate(0) scale(1)}
 .bookmark-sidebar {
   position:fixed;z-index:20;left:10px;top:10px;bottom:10px;width:var(--side-width);padding:21px 15px 16px;
   border-radius:24px;opacity:0;visibility:hidden;pointer-events:none;
@@ -56,10 +52,10 @@ body.sidebar-open .toggle-close-icon {opacity:1;transform:rotate(0) scale(1)}
 .bookmark-search input::-webkit-search-cancel-button {display:none}
 .clear-search {border:0;background:transparent;color:var(--muted);font-size:19px;line-height:1}
 .bookmark-tree {overflow:auto;max-height:calc(100vh - 160px);padding:1px 2px 10px}
-.bookmark-tree::-webkit-scrollbar,.flyout-scroll::-webkit-scrollbar,.settings-panel::-webkit-scrollbar {width:7px}
-.bookmark-tree::-webkit-scrollbar-thumb,.flyout-scroll::-webkit-scrollbar-thumb,.settings-panel::-webkit-scrollbar-thumb {background:rgba(110,130,150,.23);border-radius:10px}
+.bookmark-tree::-webkit-scrollbar,.settings-panel::-webkit-scrollbar {width:7px}
+.bookmark-tree::-webkit-scrollbar-thumb,.settings-panel::-webkit-scrollbar-thumb {background:rgba(110,130,150,.23);border-radius:10px}
 .bookmark-row {display:flex;align-items:center;gap:10px;width:100%;min-height:39px;padding:0 10px;border:0;border-radius:12px;color:var(--fg);background:none;text-decoration:none;text-align:left;transition:background .16s ease,transform .18s var(--ease)}
-.bookmark-row:hover,.bookmark-row.is-active,.bookmark-row:focus-visible {background:var(--glass-hover)}
+.bookmark-row:hover,.bookmark-row:focus-visible {background:var(--glass-hover)}
 .bookmark-row:hover {transform:translateX(2px)}
 .bookmark-row.folder {cursor:default}
 .bookmark-icon {display:grid;place-items:center;width:17px;height:17px;flex:none;opacity:.9;color:var(--muted)}
@@ -71,12 +67,6 @@ body.sidebar-open .toggle-close-icon {opacity:1;transform:rotate(0) scale(1)}
 .bookmark-result .bookmark-name {display:block}
 .bookmark-result .bookmark-text {min-width:0;flex:1}
 .empty-note {margin:12px 10px;font-size:12px;line-height:1.65;color:var(--muted)}
-.bookmark-flyouts {position:fixed;inset:0;z-index:32;pointer-events:none}
-.bookmark-flyout {position:absolute;width:244px;max-height:min(480px,calc(100vh - 26px));padding:8px;overflow:visible;border-radius:18px;transform-origin:left top;opacity:0;transform:translateX(-12px) scale(.88);pointer-events:none;transition:transform .22s var(--ease),opacity .17s ease;will-change:transform,opacity}
-.bookmark-flyout.open {opacity:1;transform:translateX(0) scale(1);pointer-events:auto}
-.bookmark-flyout.closing {opacity:0;transform:translateX(-12px) scale(.88);pointer-events:none}
-.flyout-scroll {overflow:auto;max-height:min(462px,calc(100vh - 44px))}
-.bookmark-flyout .bookmark-row {min-height:38px}
 .main {position:relative;z-index:5;min-height:100vh;display:grid;place-items:center;padding:20px;pointer-events:none;transition:padding-left .34s var(--ease)}
 @media(min-width:1000px){body.sidebar-open .main {padding-left:calc(62px + var(--side-width))}}
 .search-area {width:min(690px,calc(100vw - 54px));transform:translateY(-17vh);pointer-events:auto}
@@ -95,7 +85,6 @@ body.sidebar-open .toggle-close-icon {opacity:1;transform:rotate(0) scale(1)}
 .engine-menu button img {width:20px;height:20px}
 .selected-check {margin-left:auto;color:var(--accent);font-size:17px;visibility:hidden}
 .engine-menu button[aria-checked="true"] .selected-check {visibility:visible}
-.search-divider {width:1px;height:24px;background:var(--line);flex:none}
 #query {height:100%;flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--fg);font-size:16px}
 #query::-webkit-search-cancel-button {display:none}
 /* Always-visible circular text search submit action. */
@@ -127,9 +116,6 @@ body.sidebar-open .toggle-close-icon {opacity:1;transform:rotate(0) scale(1)}
 .mode-card {display:flex;align-items:center;gap:11px;padding:0 10px;min-height:43px;border-radius:12px;font-size:13px;cursor:pointer;transition:background .16s ease}
 .mode-card:hover,.mode-card:has(input:checked){background:var(--glass-hover)}
 .mode-card input {accent-color:var(--accent);order:3;margin-left:auto}
-.mode-swatch {display:grid;place-items:center;width:19px;height:19px;border-radius:8px;flex:none;border:1px solid var(--line);font-size:14px}
-.auto-swatch {background:linear-gradient(120deg,#eef4ff 48%,#354153 49%);color:#7194c4}
-.white-swatch {background:#fff}.black-swatch {background:#141821}.image-swatch{background:linear-gradient(125deg,#95d5df,#678cdb);color:#fff}.bing-swatch{background:linear-gradient(125deg,#45b5df,#88c8a6);color:#fff}.remote-swatch{background:linear-gradient(125deg,#adb5e6,#efc5e3);color:#fff}
 .extra-control {display:flex;flex-direction:column;gap:9px;padding:10px 5px 0}
 .extra-control label,.extra-control small {font-size:12px;color:var(--muted);line-height:1.5}
 .extra-control input[type=url] {height:41px;min-width:0;border:1px solid var(--border);border-radius:11px;background:var(--glass-raised);color:var(--fg);padding:0 11px;font-size:12px}
@@ -139,19 +125,13 @@ body.sidebar-open .toggle-close-icon {opacity:1;transform:rotate(0) scale(1)}
 .status.error {color:#d44552}
 .credit {position:fixed;z-index:2;left:20px;bottom:18px;margin:0;color:#fff;text-shadow:0 1px 10px #000a;max-width:60vw;font-size:11px}
 @media(max-width:820px){:root{--side-width:min(290px,calc(100vw - 35px))}body.sidebar-open .main{padding-left:20px}.search-area{width:min(620px,calc(100vw - 40px))}.search-bar{height:56px}.engine-trigger{padding:0 11px}.engine-trigger span{display:none}}
-@media(max-width:550px){.search-area{transform:translateY(-14vh)}.search-bar{gap:8px;padding-right:9px}.search-divider{height:19px}.settings-panel{right:14px}.bookmark-flyout{width:200px}}
+@media(max-width:550px){.search-area{transform:translateY(-14vh)}.search-bar{gap:8px;padding-right:9px}.settings-panel{right:14px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after {transition-duration:.01ms!important;animation-duration:.01ms!important;scroll-behavior:auto!important}}
 
 /* Visual refinement: common continuous glass language and precise interactive origins. */
-:root { --menu-radius:17px; --inner-glass:var(--glass-raised); --menu-outline:var(--border); }
-/* Prevent horizontal scrollbar (and its bottom bar) in long bookmark menus. */
-.bookmark-flyout { width:244px; min-width:0; max-width:calc(100vw - 12px); padding:7px; border-radius:var(--menu-radius); overflow:visible; transform-origin:left 16px; }
-.flyout-scroll { display:block; max-height:min(462px,calc(100vh - 40px)); overflow-y:auto; overflow-x:hidden; scrollbar-gutter:stable; min-width:0; }
-.bookmark-flyout .bookmark-row { min-width:0; max-width:100%; }
-.bookmark-flyout .bookmark-name {min-width:0;}
+:root { --inner-glass:var(--glass-raised); --menu-outline:var(--border); }
 .bookmark-row { min-width:0; }
 .bookmark-row:hover { transform:none; }
-.bookmark-flyout::before {content:"";position:absolute;left:-8px;top:0;bottom:0;width:8px;pointer-events:auto;}
 /* Engine selector: one continuous control whose lower half extends out of the trigger. */
 .engine-control {z-index:12;isolation:isolate;}
 .engine-trigger {min-width:146px;justify-content:flex-start;position:relative;z-index:2;background:var(--inner-glass);border:1px solid var(--menu-outline);border-radius:999px;box-shadow:0 2px 9px rgba(26,55,85,.04);padding:0 13px;gap:8px;transition:border-radius .18s ease, background-color .2s ease,box-shadow .2s ease;}
@@ -181,31 +161,15 @@ body.sidebar-open .toggle-close-icon {opacity:1;transform:rotate(0) scale(1)}
 :root[data-theme="photo"] {--glass:rgba(223,236,250,.75);--glass-raised:rgba(237,246,255,.88);--glass-hover:rgba(255,255,255,.35);}
 @media(prefers-reduced-motion:reduce){.segment-thumb {transition:none!important}}
 
-/* Attached nested flyouts expand out of the hovered row in either direction. */
-.bookmark-flyout {transform-origin:left var(--anchor-y,16px);}
-.bookmark-flyout[data-side="left"] {transform-origin:right var(--anchor-y,16px);}
-.bookmark-flyout[data-side="left"]:not(.open) {transform:translateX(10px) scale(.91);}
-.bookmark-flyout[data-side="left"].open {transform:translateX(0) scale(1);}
-.bookmark-flyout[data-side="left"]::before {left:auto;right:-8px;}
-
 /* Native browser-cache favicons, lazy loaded only for visible bookmark links. */
 .bookmark-icon {position:relative;}
 .bookmark-favicon {display:block;position:absolute;inset:0;width:17px;height:17px;object-fit:contain;opacity:0;transition:opacity .14s ease;}
 .bookmark-icon.has-favicon .bookmark-favicon {opacity:1;}
 .bookmark-icon.has-favicon svg {opacity:0;}
 .bing-brand-icon img {display:block;width:19px;height:19px;object-fit:contain;}
-/* Edge-to-edge cascade flyouts; no visible overlap with the parent column. */
-.bookmark-flyout {box-shadow:var(--shadow);}
-
 /* Safari-inspired bookmarks navigation: one viewport, sliding folder pages. */
 .bookmark-sidebar {display:flex;flex-direction:column;min-height:0;}
 .sidebar-heading {flex:none;padding-right:37px;}
-.bookmark-nav-header {width:100%;height:100%;min-width:0;display:flex;align-items:center;gap:8px;}
-.bookmark-nav-header h2 {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.bookmark-back {border:0;background:transparent;color:var(--accent);display:flex;align-items:center;gap:1px;min-width:0;max-width:49%;padding:7px 4px 7px 0;border-radius:9px;font-size:12px;flex:none;}
-.bookmark-back:hover {background:var(--glass-hover);}
-.bookmark-back svg {width:17px;height:17px;stroke-width:2.2;}
-.bookmark-back span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .bookmark-search {flex:none;}
 .bookmark-tree {position:relative;overflow:hidden;flex:1;min-height:0;max-height:none;padding:0;margin-top:1px;isolation:isolate;}
 .bookmark-page {background:var(--glass-raised);border-radius:13px;position:absolute;inset:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;padding:1px 2px 12px;opacity:1;transform:translateX(0);transition:transform .29s var(--ease),opacity .25s ease;will-change:transform;}
@@ -255,20 +219,6 @@ body.sidebar-open .bookmark-toggle {left:16px;opacity:0;visibility:hidden;pointe
 .safari-round-icon:hover {background:rgba(100,105,118,.17);}
 .safari-round-icon:active {transform:scale(.93);}
 .safari-round-icon svg {width:18px;height:18px;stroke-width:2.2;}
-.safari-dots {stroke:none;fill:currentColor;}
-.safari-dots circle {fill:currentColor;stroke:none;}
-.bookmark-actions-wrap {position:relative;flex:none;}
-.bookmark-action-menu {
-  position:absolute;z-index:50;right:0;top:calc(100% + 7px);
-  width:175px;border:1px solid var(--border);border-radius:12px;
-  padding:5px;background:var(--glass-raised);box-shadow:var(--shadow);
-  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
-}
-.bookmark-action-menu button {
-  display:block;width:100%;text-align:left;border:0;border-radius:8px;
-  padding:10px 11px;color:var(--fg);font-size:13px;background:none;
-}
-.bookmark-action-menu button:hover {background:var(--glass-hover);}
 .bookmark-search {
   flex:none;height:36px;min-height:36px;margin:11px 14px 8px;
   padding:0 12px;border-radius:12px;border:0;
@@ -426,7 +376,6 @@ button,input {font-family:inherit;}
   color:var(--accent);stroke-width:1.9;opacity:0;visibility:hidden;transform:none;
 }
 .engine-control .engine-menu [aria-checked="true"] .selected-check {opacity:1;visibility:visible;}
-.search-divider {width:1px;height:21px;background:var(--line);flex:none;}
 /* Keep the existing Safari sidebar readability correction. */
 .bookmark-row .bookmark-name {font-size:14px;line-height:1.35;font-weight:500;letter-spacing:0;}
 .bookmark-row.link .bookmark-name {font-weight:600;}
@@ -783,4 +732,55 @@ button,input {font-family:inherit;}
 .mode-card:has(input:checked) .mode-selection {opacity:1;transform:scale(1);}
 @media(prefers-reduced-motion:reduce) {
   .suggest-toggle-track,.suggest-toggle-thumb,.mode-selection {transition:none!important;}
+}
+
+/* v1.5.10 — Submission acknowledgment + quiet running light around the left capsule ONLY.
+   No navigation delay. The CSS delay suppresses the ring on fast transitions. */
+@property --engine-ring-angle {
+  syntax:"<angle>";
+  inherits:false;
+  initial-value:0deg;
+}
+@keyframes engine-ring-orbit {
+  to { --engine-ring-angle:360deg; }
+}
+@keyframes engine-ring-reveal {
+  from { opacity:0; }
+  to { opacity:1; }
+}
+@keyframes search-submit-ack {
+  0% { transform:scale(1); }
+  35% { transform:scale(.89); }
+  100% { transform:scale(1); }
+}
+.search-combo.is-submitting .search-submit {
+  animation:search-submit-ack .22s cubic-bezier(.2,.75,.25,1) both;
+}
+/* The engine control's background already uses ::before; a masked conic-gradient
+   adds a thin orbit outside it without ever rotating the capsule geometry. */
+.engine-control::after {
+  content:"";position:absolute;z-index:3;inset:-2px;
+  border-radius:999px;padding:2px;pointer-events:none;
+  background:conic-gradient(from var(--engine-ring-angle),
+    transparent 0deg,transparent 266deg,
+    rgba(64,139,249,.16) 285deg,
+    rgba(64,139,249,1) 319deg,
+    transparent 360deg);
+  filter:drop-shadow(0 0 2px rgba(48,122,245,.42));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  mask-composite:exclude;
+  opacity:0;
+}
+.engine-control.is-submitting::after {
+  animation:engine-ring-orbit 1.25s linear .10s infinite,
+            engine-ring-reveal .15s ease-out .10s both;
+}
+@media(prefers-reduced-motion:reduce) {
+  .search-combo.is-submitting .search-submit {animation:none!important;}
+  .engine-control.is-submitting::after {
+    animation:none!important;
+    opacity:.55;
+  }
 }
