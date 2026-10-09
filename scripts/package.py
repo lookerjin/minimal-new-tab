@@ -14,7 +14,7 @@ SOURCES = [
     'query-analyzer.js', 'suggestions.js', 'candidate-pipeline.js',
     'frecency.js', 'bookmarks.js', 'boot.js', 'site-icons.js',
 ]
-SOURCES += [p.relative_to(ROOT).as_posix() for folder in ('assets', 'icons')
+SOURCES += [p.relative_to(ROOT).as_posix() for folder in ('assets', 'icons', '_locales')
             for p in sorted((ROOT / folder).rglob('*')) if p.is_file()]
 
 
@@ -25,6 +25,15 @@ def validate(expected_version=None):
         raise ValueError('Expected Manifest V3 and numeric extension version')
     if expected_version and version != expected_version.removeprefix('v'):
         raise ValueError(f'Tag {expected_version} does not match manifest version {version}')
+    if manifest.get('default_locale') not in ('zh_CN', 'en'):
+        raise ValueError('Expected a supported default_locale')
+    for locale in ('zh_CN', 'en'):
+        loc_path = ROOT / '_locales' / locale / 'messages.json'
+        messages = json.loads(loc_path.read_text(encoding='utf-8'))
+        for field in ('name', 'description'):
+            key = manifest[field].removeprefix('__MSG_').removesuffix('__')
+            if manifest[field] != f'__MSG_{key}__' or key not in messages or not messages[key].get('message'):
+                raise ValueError(f'Missing localized {field} in {locale}')
     html = (ROOT / manifest['chrome_url_overrides']['newtab']).read_text(encoding='utf-8')
     referenced = re.findall(r'<script[^>]+src="([^"]+)"|<link[^>]+href="([^"]+)"', html)
     required = [manifest['chrome_url_overrides']['newtab'], *manifest['icons'].values()]

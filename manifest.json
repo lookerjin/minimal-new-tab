@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Minimal New Tab",
-  "version": "1.5.11",
-  "description": "本地优先的新标签页：搜索、按需搜索建议、壁纸和书签导航。",
+  "name": "__MSG_extensionName__",
+  "version": "1.5.12",
+  "description": "__MSG_extensionDescription__",
   "permissions": [
     "storage",
     "bookmarks",
@@ -24,5 +24,6 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "default_locale": "zh_CN"
 }
