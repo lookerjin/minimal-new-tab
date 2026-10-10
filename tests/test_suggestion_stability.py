@@ -101,10 +101,17 @@ def test_late_online_results_do_not_cause_collapse_and_reopen():
         pending = geometry(page)
         assert pending['active'], pending
         assert pending['panelHeight'] > 0, pending
-        assert pending['rowCount'] == 0
+        # Retain the previous rows visually while online suggestions are pending,
+        # but prevent navigation of stale results and hide them from assistive tech.
+        assert pending['rowCount'] > 0, pending
+        assert page.locator('#search-suggestions').evaluate('(node) => node.inert')
+        assert page.locator('#search-suggestions').get_attribute('aria-hidden') == 'true'
+        assert q.get_attribute('aria-expanded') == 'false'
         page.wait_for_timeout(280)
         final = geometry(page)
         assert final['active'] and final['rowCount'] == 1, final
+        assert page.locator('#search-suggestions').get_attribute('aria-hidden') == 'false'
+        assert not page.locator('#search-suggestions').evaluate('(node) => node.inert')
         browser.close()
 
 
