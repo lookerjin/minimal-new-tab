@@ -116,7 +116,7 @@ def test_reduced_motion_has_no_animated_transition():
         browser.close()
 
 
-def test_rapid_typing_recovers_and_removed_rows_fade_without_clickable_duplicates():
+def test_rapid_typing_recovers_without_ghost_rows_or_clickable_duplicates():
     with sync_playwright() as pw:
         browser=launch_chromium(pw)
         page=browser.new_page(viewport={'width':420,'height':360})
@@ -129,8 +129,8 @@ def test_rapid_typing_recovers_and_removed_rows_fade_without_clickable_duplicate
         assert geometry(page)['active']
         q.fill('go')
         page.wait_for_timeout(35)
-        ghost_count=page.locator('.suggestion-ghost').count()
-        assert ghost_count >= 1
+        # An input edit does not clone the previous candidates into fading ghosts.
+        assert page.locator('.suggestion-ghost').count() == 0
         assert len(page.locator('.suggestion-item').all_text_contents()) <= 6
         q.fill('git')
         page.wait_for_timeout(180)
@@ -193,4 +193,59 @@ def test_scrollbar_stays_hidden_during_resize_but_small_viewport_still_scrolls()
         assert compact['content'] > compact['height'], compact
         assert compact['after'] > compact['before'], compact
         assert compact['scrollbar'] == 'none', compact
+        browser.close()
+
+
+def test_backspace_does_not_restart_row_animations_or_replace_shared_candidates():
+    """Capture the DOM animation budget across a burst of edits and delayed online snapshots."""
+    with sync_playwright() as pw:
+        browser = launch_chromium(pw)
+        page = browser.new_page(viewport={'width': 1150, 'height': 850})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        build_page(page)
+        page.evaluate("""() => {
+          localStorage.setItem('onlineSuggestions', 'on');
+          window.fetch = async url => {
+            await new Promise(resolve => setTimeout(resolve, 65));
+            const query = new URL(url).searchParams.get('q') || '';
+            return new Response(JSON.stringify([query,
+              Array.from({length: 5}, (_, index) => query + ' remote ' + index)]),
+              {status: 200, headers: {'content-type': 'application/json'}});
+          };
+          window.__motionCalls = [];
+          const animate = Element.prototype.animate;
+          Element.prototype.animate = function(...args) {
+            if (this.classList.contains('suggestion-item') ||
+                this.classList.contains('suggestion-ghost')) {
+              window.__motionCalls.push({key: this.dataset.key, at: performance.now(),
+                ghost: this.classList.contains('suggestion-ghost')});
+            }
+            return animate.apply(this, args);
+          };
+        }""")
+        q = page.locator('#query')
+        q.fill('git tutorial')
+        page.wait_for_timeout(650)
+        assert page.locator('.suggestion-item').count() >= 3
+        # Keep the same DOM node for a suggestion that survives each backspace.
+        page.evaluate("""() => {
+          window.__retained = document.querySelector(
+            '.suggestion-item[data-key="text:git tutorial"]');
+          window.__motionCalls = [];
+        }""")
+        assert page.evaluate("window.__retained !== null")
+        for _ in range(5):
+            q.press('Backspace')
+            page.wait_for_timeout(48)
+            assert page.locator('.suggestion-ghost').count() == 0
+        page.wait_for_timeout(560)
+        assert page.evaluate("""() => [...document.querySelectorAll('.suggestion-item')]
+          .includes(window.__retained)""")
+        motion = page.evaluate('window.__motionCalls')
+        assert not any(call['ghost'] for call in motion), motion
+        assert len(motion) <= 6, f'Multiple row-animation batches restarted: {motion}'
+        assert page.locator('.suggestion-item').count() <= 6
+        assert geometry(page)['active']
+        assert not errors, errors
         browser.close()

@@ -5,11 +5,6 @@
   const list = document.getElementById('search-suggestions');
   const form = document.getElementById('search-form');
   const combo = document.querySelector('.search-combo');
-  const ghostLayer = document.createElement('div');
-  ghostLayer.className = 'suggestion-ghost-layer';
-  ghostLayer.setAttribute('aria-hidden', 'true');
-  ghostLayer.inert = true;
-  combo.append(ghostLayer);
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const PANEL_DURATION = 300; // Matches the search-engine capsule expansion.
   const SHRINK_IDLE_MS = 180; // Delay shrinking while the user is still typing.
@@ -17,6 +12,8 @@
   let shrinkTimer = null;
   let panelHeight = 0;
   let lastEditAt = 0;
+  // At most one row-motion batch per query, after typing has settled.
+  let animatedGeneration = -1;
   let providersSettled = true; // Only the final merged candidate set may shrink the shell.
   const MAX_ITEMS = 6;
   const MAX_BOOKMARK_CANDIDATES = 80;
@@ -115,7 +112,6 @@
     document.dispatchEvent(new Event('newtab-suggestion-selection-changed'));
     setPanelHeight(0);
     clearTimeout(hideTimer);
-    ghostLayer.replaceChildren();
     if (reduceMotion.matches || list.hidden) {
       list.hidden = true;
       list.replaceChildren();
@@ -193,35 +189,15 @@
     const opening = !panelOpen();
     // Reuse visible rows by candidate identity so typing does not flash all content.
     const existing = new Map([...list.children].map(row => [row.dataset.key, row]));
+    // Progressive history/bookmark/online snapshots should not each restart
+    // FLIP animations. Wait until the user has stopped editing, then allow
+    // at most one coherent row-motion batch for this query generation.
+    const animateRows = !reduceMotion.matches && !opening &&
+      animatedGeneration !== generation &&
+      performance.now() - lastEditAt >= SHRINK_IDLE_MS;
     const before = new Map();
-    if (!reduceMotion.matches && !opening) {
+    if (animateRows) {
       for (const row of list.children) before.set(row.dataset.key, row.getBoundingClientRect());
-    }
-    const nextKeys = new Set(items.map(keyFor));
-    // Incoming provider snapshots must not prematurely cancel an outgoing fade.
-    for (const ghost of ghostLayer.children) {
-      if (nextKeys.has(ghost.dataset.key)) ghost.remove();
-    }
-    const fadingKeys = new Set([...ghostLayer.children].map(node => node.dataset.key));
-    if (!opening && !reduceMotion.matches) {
-      const layerTop = list.getBoundingClientRect().top;
-      for (const [key, row] of existing) {
-        if (nextKeys.has(key) || fadingKeys.has(key)) continue;
-        const rect = before.get(key);
-        if (!rect) continue;
-        const ghost = row.cloneNode(true);
-        ghost.className = 'suggestion-ghost';
-        ghost.dataset.key = key;
-        ghost.removeAttribute('role');
-        ghost.removeAttribute('id');
-        ghost.setAttribute('aria-hidden', 'true');
-        ghost.tabIndex = -1;
-        ghost.style.top = `${rect.top - layerTop}px`;
-        ghostLayer.append(ghost);
-        ghost.animate([{opacity:1,transform:'translateY(0)'},
-          {opacity:0,transform:'translateY(-7px)'}],
-          {duration:170,easing:'cubic-bezier(.2,.75,.25,1)'}).onfinish = () => ghost.remove();
-      }
     }
     const fragment = document.createDocumentFragment();
     const inserted = [];
@@ -270,8 +246,10 @@
     resizePanel(targetHeight, immediateShrink);
     input.setAttribute('aria-expanded', 'true');
     updateActive();
-    if (reduceMotion.matches) return;
-    // FLIP existing items, fade/slide only genuinely new results.
+    if (!animateRows) return;
+    let animated = false;
+    // Animate only genuine changes once per query, never layer a second
+    // transition over an earlier provider snapshot or the next backspace.
     for (const row of list.children) {
       const old = before.get(row.dataset.key);
       if (old) {
@@ -280,14 +258,20 @@
         if (Math.abs(shift) > 1) {
           row.animate([{transform:`translateY(${shift}px)`},{transform:'translateY(0)'}],
             {duration:260, easing:'cubic-bezier(.2,.75,.25,1)'});
+          animated = true;
         }
       } else if (inserted.includes(row) && !opening) {
         row.animate([{opacity:0,transform:'translateY(-7px)'},{opacity:1,transform:'translateY(0)'}],
           {duration:220, easing:'cubic-bezier(.2,.75,.25,1)'});
+        animated = true;
       }
     }
+    if (animated) animatedGeneration = generation;
   }
   function showCandidates(candidates) {
+    // Empty partial batches must not erase the last visible rows while
+    // independent providers are still resolving. They remain inert.
+    if (!candidates.length && !providersSettled && list.children.length) return;
     // The two explicit actions for a URL stay visible and in a predictable
     // order, regardless of frecency or when bookmarks finish loading.
     if (QueryAnalyzer.analyze(currentText).type === 'url') {
@@ -440,7 +424,17 @@
     // Changing settings without focusing the search field must not leak an old query.
     if (!currentText || composing || document.activeElement !== input) { hide(); return; }
     lastEditAt = performance.now();
-    if (panelOpen()) draw(); // Clear stale, clickable candidates without closing the shell.
+    if (panelOpen()) {
+      // Do not call draw() with an empty items array here: that turned every
+      // visible row into a ghost on each keystroke/backspace. Keep previous
+      // rows painted but non-interactive until the first new snapshot.
+      list.inert = true;
+      list.setAttribute('aria-hidden', 'true');
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+      for (const row of list.children) row.getAnimations().forEach(animation => animation.cancel());
+      document.dispatchEvent(new Event('newtab-suggestion-selection-changed'));
+    }
     const controller = new AbortController();
     activeRequest = controller;
     let localCount = 0;

@@ -2,7 +2,12 @@
 
 This file summarizes user-facing changes. Tags represent released builds; the versions below document pre-release iterations until the first tag is published.
 
-## 1.5.13 — Unreleased
+## 1.5.14 — Unreleased
+
+- Prevent suggestion rows from jittering on backspace: keep stale rows inert until replacement, remove duplicate exit ghosts, and limit per-query row animation batches.
+- Add Chromium regression coverage for rapidly deleted search queries, unchanged row identity, and motion count.
+
+## 1.5.13 — Released
 
 - Start each new tab with its bookmark sidebar closed instead of restoring the previous tab's sidebar state.
 - Track deliberate bookmark-sidebar visits as local ranking feedback, using the same URL identity as search suggestions.

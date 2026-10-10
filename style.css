@@ -666,25 +666,9 @@ button,input {font-family:inherit;}
   transform-origin:center top;
   transition:background-color .15s ease;
 }
-/* A non-interactive overlay briefly fades out removed rows; real options stay semantic. */
-.search-combo .suggestion-ghost-layer {
-  position:absolute; top:calc(100% - 1px); left:0; right:0;
-  z-index:2; height:var(--suggestion-height); overflow:hidden; pointer-events:none;
-  transition:height .30s cubic-bezier(.2,.75,.25,1);
-}
-.search-combo .suggestion-ghost {
-  display:flex; align-items:center; width:calc(100% - 12px); min-height:42px;
-  position:absolute; left:6px; gap:11px; padding:7px 11px;
-  border:0; border-radius:11px; background:transparent;
-  color:var(--search-cell-fg); text-align:left; font-size:13px;
-  box-sizing:border-box;
-}
-@media(max-width:550px) {
-  .search-combo .suggestion-ghost {min-height:43px;gap:7px;padding-inline:9px;}
-}
 @media(prefers-reduced-motion:reduce) {
   .search-combo::before,.search-combo .search-suggestions,
-  .search-combo .suggestion-ghost-layer,.search-combo .suggestion-item { transition:none!important; animation:none!important; }
+  .search-combo .suggestion-item { transition:none!important; animation:none!important; }
 }
 
 
