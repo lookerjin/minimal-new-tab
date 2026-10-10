@@ -2,7 +2,7 @@
 
 一个本地优先、简洁快速的桌面 **Microsoft Edge / Chromium 新标签页扩展**。使用 Manifest V3、原生 HTML/CSS/JavaScript；不依赖服务器、构建框架或运行时第三方 JS 包。
 
-> 当前版本：**1.5.12（首次 Edge 商店发布候选）**。正式 ZIP 由 GitHub Actions 发布到 GitHub Release；Edge 商店上架将在完成发布流程后建立。
+> 当前仓库开发版本：**1.5.13（尚未发布）**；最近正式发行版：**v1.5.12**。正式 ZIP 由 GitHub Actions 发布到 GitHub Release；Edge 商店上架仍在准备中。
 
 ## 功能
 

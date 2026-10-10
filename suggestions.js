@@ -36,8 +36,7 @@
     en: {url:'Visit URL', history:'Recent', bookmark:'Bookmark', online:'Suggest'}
   };
   const normalize = value => String(value || '').normalize('NFKC').toLocaleLowerCase();
-  const keyFor = item => item.url ? `url:${item.url}`
-    : `${item.type === 'search' ? 'search' : 'text'}:${normalize(item.text)}`;
+  const keyFor = item => window.SuggestionUsage.keyFor(item);
   let generation = 0;
   let activeRequest = null;
   let composing = false;
@@ -47,41 +46,21 @@
   let selectedKey = null;
   let currentText = '';
   let history = [];
-  let usage = [];
+  let lastRanking = null;
   // Timings are memory-only and contain no query text, URLs or candidate titles.
   const diagnosticSamples = [];
 
   try {
     const saved = JSON.parse(localStorage.getItem('minimalSearchHistory') || '[]');
     if (Array.isArray(saved)) history = saved.filter(v => typeof v === 'string').slice(0, 30);
-    const data = JSON.parse(localStorage.getItem('minimalSuggestUsage') || '[]');
-    if (Array.isArray(data)) usage = data.filter(v => v && typeof v.key === 'string' && typeof v.prefix === 'string').slice(0, 80);
   } catch (_) {}
 
   function isOnline() {
     try { return localStorage.getItem('onlineSuggestions') !== 'off'; }
     catch (_) { return true; }
   }
-  function usageFor(item, text) {
-    const key = keyFor(item);
-    const matching = usage.filter(row => row.key === key);
-    const count = matching.reduce((sum, row) => sum + (Number(row.count) || 0), 0);
-    const lastUsed = Math.max(0, ...matching.map(row => Number(row.lastUsed) || 0));
-    const adaptive = matching.reduce((sum, row) => sum + (row.prefix.startsWith(normalize(text)) ? Math.min(10, row.count || 0) : 0), 0);
-    return {...item, count, lastUsed, adaptive};
-  }
-  // Only selections/submissions affect usage. Never persist each keystroke.
-  function recordChoice(typed, item) {
-    const key = keyFor(item);
-    const prefix = normalize(typed).slice(0, 160);
-    if (!prefix) return;
-    const previous = usage.findIndex(row => row.key === key && row.prefix === prefix);
-    const count = previous >= 0 ? Math.min(100, (usage[previous].count || 0) + 1) : 1;
-    if (previous >= 0) usage.splice(previous, 1);
-    usage.unshift({key, prefix, count, lastUsed:Date.now()});
-    usage = usage.slice(0, 80);
-    try { localStorage.setItem('minimalSuggestUsage', JSON.stringify(usage)); } catch (_) {}
-  }
+  const usageFor = (item, text) => window.SuggestionUsage.decorate(item, text);
+  const recordChoice = (typed, item) => window.SuggestionUsage.record(typed, item);
   function recordSearch(value, typed = value, candidate = null) {
     history = [value, ...history.filter(row => row !== value)].slice(0, 30);
     recordChoice(typed, candidate?.url ? candidate : {text:value});
@@ -442,7 +421,9 @@
       firstCandidate:summarize(diagnosticSamples.map(sample => sample.firstCandidateMs)),
       firstLocal:summarize(diagnosticSamples.map(sample => sample.firstLocalMs)),
       firstOnline:summarize(diagnosticSamples.map(sample => sample.firstOnlineMs)),
-      providers
+      providers,
+      // Developer-only aggregate snapshot: no query, URL, title, or key is exposed.
+      ranking:lastRanking
     };
   }
 
@@ -474,13 +455,20 @@
       localCount: () => localCount,
       onProviderSettled: ({name, elapsedMs, count}) => {
         sample.providers[name] = {elapsedMs:round(elapsedMs), count};
-      }
+      },
+      onRanked: counts => { sample.rankCounts = counts; }
     };
     void CandidatePipeline.collect(context, candidates => {
       if (token !== generation || controller.signal.aborted) return;
       localCount = candidates.filter(item => item.type !== 'online').length;
       showCandidates(candidates.map(item => usageFor(item, currentText))
         .sort((a, b) => FrecencyRank.score(b, currentText) - FrecencyRank.score(a, currentText)));
+      lastRanking = {
+        ...sample.rankCounts,
+        visible:items.map((item, index) => ({
+          position:index + 1, source:item.type, ...FrecencyRank.breakdown(item, currentText)
+        }))
+      };
       if (!panelOpen()) return;
       const elapsed = round(performance.now() - sample.start);
       if (sample.firstCandidateMs === null) sample.firstCandidateMs = elapsed;

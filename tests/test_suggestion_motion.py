@@ -28,7 +28,7 @@ def build_page(page):
       };
       window.fetch=async()=>{throw Error('Offline test expected')};
     }''')
-    for name in ['boot.js','site-icons.js','query-analyzer.js','newtab.js','bookmarks.js','frecency.js','candidate-pipeline.js','suggestions.js']:
+    for name in ['boot.js','site-icons.js','query-analyzer.js','suggestion-usage.js','newtab.js','bookmarks.js','frecency.js','candidate-pipeline.js','suggestions.js']:
         script=(ROOT/name).read_text()
         if name == 'newtab.js':
             script=script.replace('location.assign(action.url)','window.__navigations.push(action.url)')

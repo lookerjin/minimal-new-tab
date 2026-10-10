@@ -12,7 +12,7 @@ SOURCES = [
     'LICENSE-FLUENT-ICONS.txt',
     'manifest.json', 'newtab.html', 'style.css', 'newtab.js',
     'query-analyzer.js', 'suggestions.js', 'candidate-pipeline.js',
-    'frecency.js', 'bookmarks.js', 'boot.js', 'site-icons.js',
+    'frecency.js', 'suggestion-usage.js', 'bookmarks.js', 'boot.js', 'site-icons.js',
 ]
 SOURCES += [p.relative_to(ROOT).as_posix() for folder in ('assets', 'icons', '_locales')
             for p in sorted((ROOT / folder).rglob('*')) if p.is_file()]
