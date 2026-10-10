@@ -32,7 +32,7 @@ def setup(page):
       };
       window.fetch = async () => {throw new Error('network disabled in test')};
     }''')
-    for name in ['boot.js','site-icons.js','query-analyzer.js','newtab.js','bookmarks.js']:
+    for name in ['boot.js','site-icons.js','query-analyzer.js','suggestion-usage.js','newtab.js','bookmarks.js']:
         page.add_script_tag(content=(ROOT/name).read_text())
 
 

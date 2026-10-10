@@ -18,20 +18,25 @@
     return candidate.type === 'online' ? 0 : -1000;
   }
 
-  function score(candidate, query, now = Date.now()) {
+  function breakdown(candidate, query, now = Date.now()) {
     const count = Math.max(0, Number(candidate.count) || 0);
     const last = Number(candidate.lastUsed) || 0;
     const ageDays = last > 0 ? Math.max(0, (now - last) / 86400000) : Infinity;
-    // Old choices fade out instead of becoming permanent ranking winners.
     const decay = Number.isFinite(ageDays) ? Math.pow(0.5, ageDays / 45) : 0;
+    const source = SOURCE_WEIGHT[candidate.type] || 0;
+    const match = matchScore(candidate, query);
     const usage = Math.min(35, Math.log2(count * decay + 1) * 9);
     const freshness = Number.isFinite(ageDays) ? 20 * Math.pow(0.5, ageDays / 14) : 0;
     const adaptive = candidate.adaptive ? Math.min(25, 9 * Math.log2(candidate.adaptive * decay + 1)) : 0;
-    return (SOURCE_WEIGHT[candidate.type] || 0) + matchScore(candidate, query) + usage + freshness + adaptive;
+    return {source, match, usage, freshness, adaptive,
+      total:source + match + usage + freshness + adaptive};
+  }
+  function score(candidate, query, now = Date.now()) {
+    return breakdown(candidate, query, now).total;
   }
 
   window.FrecencyRank = Object.freeze({
-    score,
+    score, breakdown,
     sort(candidates, query) {
       return candidates.map((item, index) => ({item, index, score: score(item, query)}))
         .filter(row => row.score >= 0)

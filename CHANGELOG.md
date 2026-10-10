@@ -2,6 +2,13 @@
 
 This file summarizes user-facing changes. Tags represent released builds; the versions below document pre-release iterations until the first tag is published.
 
+## 1.5.13 — Unreleased
+
+- Start each new tab with its bookmark sidebar closed instead of restoring the previous tab's sidebar state.
+- Track deliberate bookmark-sidebar visits as local ranking feedback, using the same URL identity as search suggestions.
+- Add privacy-safe rank-stage and score diagnostics for tuning search-first suggestions.
+- Add bilingual Issue templates for bugs and feature requests.
+
 ## 1.5.12 — Edge listing readiness candidate (unreleased)
 
 - Localize extension name and short description for Chinese and English in Manifest V3.

@@ -1,0 +1,36 @@
+name: "Bug report / 错误报告"
+description: "Report a reproducible problem / 反馈可复现的问题"
+title: "[Bug] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: "问题描述 / Problem"
+      description: "实际发生了什么？ / What happened?"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: "复现步骤 / Reproduction"
+      description: "列出最少步骤，尽可能附上输入与环境条件。"
+      placeholder: "1. ...\n2. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "预期行为 / Expected behavior"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: "环境 / Environment"
+      description: "应用版本、操作系统、浏览器或运行时（如适用）。"
+  - type: textarea
+    id: evidence
+    attributes:
+      label: "日志与证据 / Logs and evidence"
+      description: "可附截图或日志；提交前请移除 Token、Cookie、个人信息。"
+      render: text

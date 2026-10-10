@@ -78,7 +78,7 @@ def test_search_ui():
               {status:200, headers:{'content-type':'application/json'}});
           };
         }""")
-        for name in ['boot.js','site-icons.js','query-analyzer.js','newtab.js','bookmarks.js',
+        for name in ['boot.js','site-icons.js','query-analyzer.js','suggestion-usage.js','newtab.js','bookmarks.js',
                      'frecency.js','candidate-pipeline.js','suggestions.js']:
             js = (ROOT / name).read_text()
             if name == 'newtab.js':
@@ -207,6 +207,9 @@ def test_search_ui():
         assert metrics['firstCandidate']['samples'] >= 1
         assert metrics['providers']['bookmark']['samples'] >= 1
         assert 'racing suggestion' not in str(metrics)
+        assert metrics['ranking']['recalled'] >= metrics['ranking']['unique']
+        assert all('text' not in candidate and 'url' not in candidate
+                   for candidate in metrics['ranking']['visible'])
         assert not errors, errors
         browser.close()
 
@@ -249,6 +252,7 @@ def test_lazy_bootstrap():
           window.fetch = async () => new Response(JSON.stringify(['git', ['git tutorial']]), {status:200});
         }""")
         page.add_script_tag(content=(ROOT / 'query-analyzer.js').read_text())
+        page.add_script_tag(content=(ROOT / 'suggestion-usage.js').read_text())
         bootstrap = (ROOT / 'newtab.js').read_text()
         bootstrap = bootstrap.replace('location.assign(action.url)', 'window.__navigations.push(action.url)')
         bootstrap = bootstrap.replace('location.assign(ENGINE_META[settings.engine].url+encodeURIComponent(submitted))',

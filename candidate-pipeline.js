@@ -11,7 +11,7 @@
     providers.push(provider);
     return () => { const index = providers.indexOf(provider); if (index !== -1) providers.splice(index, 1); };
   }
-  function rank(items, query) {
+  function rank(items, query, onRanked) {
     const seen = new Set();
     const unique = [];
     // Providers are always merged in registration order, not completion order.
@@ -23,7 +23,9 @@
       seen.add(key);
       unique.push(item);
     }
-    return window.FrecencyRank ? window.FrecencyRank.sort(unique, query) : unique;
+    const ranked = window.FrecencyRank ? window.FrecencyRank.sort(unique, query) : unique;
+    onRanked?.({recalled:items.length, unique:unique.length, eligible:ranked.length});
+    return ranked;
   }
   async function collect(context = {}, onUpdate = () => {}) {
     const gathered = new Map();
@@ -37,7 +39,7 @@
       scheduled = true;
       Promise.resolve().then(() => {
         scheduled = false;
-        if (!context.signal?.aborted) onUpdate(rank(allCandidates(), context.query));
+        if (!context.signal?.aborted) onUpdate(rank(allCandidates(), context.query, context.onRanked));
       });
     };
     await Promise.all(providers.map(async (provider, index) => {

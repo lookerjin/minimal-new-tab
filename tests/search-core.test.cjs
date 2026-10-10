@@ -126,3 +126,31 @@ test('Aborted collections do not emit stale results', async () => {
   assert.equal(changes.length,0);
   unreg();
 });
+
+test('bookmark sidebar visits contribute to search ranking without storing typed searches', () => {
+  const localValues = new Map();
+  const storage = {
+    getItem: key => localValues.get(key) || null,
+    setItem: (key, value) => localValues.set(key, String(value))
+  };
+  const testWindow = {};
+  const sandbox = vm.createContext({window:testWindow, localStorage:storage, URL, Date});
+  vm.runInContext(readFileSync(path.resolve(__dirname,'..','suggestion-usage.js'),'utf8'), sandbox);
+  const tracker = testWindow.SuggestionUsage;
+  const bookmark = {type:'bookmark',text:'GitHub Documentation',url:'https://github.com/'};
+  const unrelated = {type:'history',text:'git lessons'};
+  assert(FrecencyRank.score(tracker.decorate(unrelated, 'git'), 'git') >
+         FrecencyRank.score(tracker.decorate(bookmark, 'git'), 'git'));
+  tracker.record('GitHub Documentation', {...bookmark,url:'https://github.com'});
+  const selected = tracker.decorate(bookmark, 'git');
+  assert.equal(selected.count, 1);
+  assert(selected.lastUsed > 0);
+  assert(FrecencyRank.score(selected, 'git') >
+         FrecencyRank.score(tracker.decorate(unrelated, 'git'), 'git'));
+  assert.equal(localValues.has('minimalSearchHistory'), false,
+    'opening a bookmark must not create a search-history entry');
+  assert.equal(tracker.keyFor(bookmark), tracker.keyFor({...bookmark,url:'https://github.com'}));
+  const metrics = FrecencyRank.breakdown(selected, 'git');
+  assert(Math.abs(FrecencyRank.score(selected, 'git') - metrics.total) < 1);
+  assert.deepEqual(Object.keys(metrics), ['source','match','usage','freshness','adaptive','total']);
+});

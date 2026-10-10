@@ -29,7 +29,6 @@
     document.body.classList.toggle('sidebar-open', open);
     toggle.setAttribute('aria-expanded', String(open));
     toggle.setAttribute('aria-label', '展开书签侧边栏');
-    try { localStorage.setItem('bookmarkSidebarOpen', open ? '1' : '0'); } catch (_) {}
     if (open && (!loaded || dirty)) void readBookmarks();
     if (!open) toggle.focus({preventScroll: true});
   }
@@ -106,7 +105,16 @@
     if (folder) {
       row.type = 'button';
       row.addEventListener('click', () => enterFolder(item));
-    } else row.href = url;
+    } else {
+      row.href = url;
+      // A deliberately opened site is meaningful feedback even without using the search dropdown.
+      const recordVisit = () => {
+        if (/^https?:\/\//i.test(url)) window.SuggestionUsage?.record(
+          item.title || item.url, {type:'bookmark', text:item.title || item.url, url});
+      };
+      row.addEventListener('click', recordVisit);
+      row.addEventListener('auxclick', event => { if (event.button === 1) recordVisit(); });
+    }
     row.append(iconElement(folder, url));
     const text = document.createElement('span');
     text.className = 'bookmark-text';
@@ -376,5 +384,5 @@
   for (const eventName of ['onCreated', 'onRemoved', 'onChanged', 'onMoved', 'onChildrenReordered', 'onImportEnded']) {
     chrome.bookmarks?.[eventName]?.addListener(updateLater);
   }
-  try { if (localStorage.getItem('bookmarkSidebarOpen') === '1') setOpen(true); } catch (_) {}
+  // Every new tab starts with its bookmark sidebar closed (Issue #4).
 })();
