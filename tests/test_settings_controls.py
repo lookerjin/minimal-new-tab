@@ -74,15 +74,16 @@ def test_settings_controls_keep_native_keyboard_state_and_motion_support():
         assert toggle.is_checked()
         assert page.evaluate("localStorage.getItem('onlineSuggestions')") == 'on'
 
-        assert page.locator('.mode-selection').count() == 6
+        page.locator('#open-wallpapers').click()
+        assert page.locator('#background-options > .wallpaper-option').count() == 8
         radios = page.locator('input[name="mode"]')
-        assert radios.count() == 6
+        assert radios.count() == 4
         assert page.locator('input[name="mode"]:checked').get_attribute('value') == 'auto'
         assert page.locator('.mode-card:has(input:checked) .mode-selection').count() == 1
         page.locator('label.mode-card:has(input[value="white"])').click()
         assert page.locator('input[name="mode"]:checked').get_attribute('value') == 'white'
         page.wait_for_function("window.__saved.some(p => p.mode === 'white')")
-        toggle.focus()
+        page.locator('#close-wallpapers').focus()
         page.keyboard.press('Tab')
         assert page.locator('input[name="mode"][value="white"]').evaluate('(node) => document.activeElement === node && node.matches(":focus-visible")')
         assert page.locator('.mode-card:has(input[value="white"])').evaluate('(node) => getComputedStyle(node).outlineStyle') == 'solid'

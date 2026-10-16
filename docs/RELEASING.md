@@ -31,11 +31,11 @@ Subsequent Microsoft Store updates remain manual for now. A separate Edge Add-on
 ## Local checks
 
 ```sh
-node --test tests/search-core.test.cjs
+node --test tests/search-core.test.cjs tests/site-search.test.cjs
 python -m pip install -r requirements-test.txt
 python -m playwright install chromium
-python -m pytest -q tests/test_search_ui.py
-python scripts/package.py --version v1.5.12
+python -m pytest -q tests/
+python scripts/package.py --version v1.5.14
 ```
 
-Browser tests use mock extension APIs; they do not replace real Edge store-install acceptance.
+Browser tests include mock extension APIs, real IndexedDB, and an unpacked MV3 Chromium smoke test; they do not replace real Edge store-install acceptance.

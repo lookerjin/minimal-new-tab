@@ -91,7 +91,7 @@ def test_search_ui():
         page.wait_for_timeout(165)
         options = page.locator('.suggestion-item')
         assert options.count() >= 2
-        first = options.first.inner_text()
+        first = options.nth(1).inner_text()
         assert 'Git' in first, first
         # A selection must survive the later online batch reordering the list.
         q.press('ArrowDown')
@@ -121,23 +121,21 @@ def test_search_ui():
         assert kept['text'] == highlighted['text']
         assert page.evaluate("document.querySelector('#query').getAttribute('aria-activedescendant')") == 'search-suggestion-5'
         q.press('Enter')
-        assert page.evaluate('window.__navigations.at(-1)').endswith('racing%20suggestion%205')
+        assert page.evaluate('window.__navigations.at(-1)').endswith('racing%20suggestion%204')
 
         remote_before_url = page.evaluate('window.__remote.length')
         q.fill('github.com')
         page.wait_for_timeout(340)
-        assert page.locator('.suggestion-label').first.inner_text() == '访问网址'
+        assert page.locator('.suggestion-label').first.inner_text() == '默认'
         assert page.locator('.suggestion-label').nth(1).inner_text() == '使用 Google 搜索'
         assert page.evaluate('window.__remote.length') == remote_before_url  # URLs stay local.
         assert page.locator('.search-submit').get_attribute('aria-label') == '访问网址'
         # A literal URL is a navigation even with no highlighted candidate.
         q.press('Enter')
         assert page.evaluate('window.__navigations.at(-1)') == 'https://github.com/'
-        # ArrowDown twice explicitly selects the secondary search action.
+        # The default visit is already highlighted; the first cycle selects search.
         q.fill('github.com')
         page.wait_for_timeout(130)
-        q.press('ArrowDown')
-        assert page.locator('.search-submit').get_attribute('aria-label') == '访问网址'
         q.press('ArrowDown')
         assert page.evaluate('window.NewTabSuggest.chosenDestination().type') == 'search'
         assert page.locator('.search-submit').get_attribute('aria-label') == '搜索'

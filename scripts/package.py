@@ -10,6 +10,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [
     'LICENSE-FLUENT-ICONS.txt',
+    'LICENSE-KAGI-BANGS.txt', 'site-search.js',
     'manifest.json', 'newtab.html', 'style.css', 'newtab.js',
     'query-analyzer.js', 'suggestions.js', 'candidate-pipeline.js',
     'frecency.js', 'suggestion-usage.js', 'bookmarks.js', 'boot.js', 'site-icons.js',

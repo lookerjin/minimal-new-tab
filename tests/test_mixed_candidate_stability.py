@@ -1,4 +1,5 @@
 """Mixed-source query snapshots must not reverse the search capsule's height mid-edit."""
+import pytest
 from playwright.sync_api import sync_playwright
 from browser_runtime import launch_chromium
 from test_suggestion_motion import build_page, geometry
@@ -67,7 +68,8 @@ def test_backspace_burst_with_mixed_sources_keeps_capsule_height():
         browser.close()
 
 
-def test_mixed_provider_completion_preserves_keyboard_selection():
+@pytest.mark.parametrize('key',['ArrowDown','Tab'])
+def test_mixed_provider_completion_preserves_keyboard_selection(key):
     with sync_playwright() as p:
         browser = launch_chromium(p)
         page = browser.new_page(viewport={'width': 1150, 'height': 850})
@@ -76,7 +78,7 @@ def test_mixed_provider_completion_preserves_keyboard_selection():
         q = page.locator('#query')
         q.fill('git t')
         page.wait_for_timeout(60)
-        q.press('ArrowDown')
+        q.press(key)
         selected = page.evaluate('window.NewTabSuggest.chosenDestination()')
         assert selected and selected['type'] == 'history'
         page.wait_for_timeout(470)
