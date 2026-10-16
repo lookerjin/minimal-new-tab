@@ -60,13 +60,16 @@ def test_capsule_transition_and_dynamic_results():
         page.on('pageerror',lambda e: errors.append(str(e)))
         build_page(page)
         q=page.locator('#query')
-        page.wait_for_timeout(330)  # Existing page layout has a brief initial CSS transition.
+        # Styles/settings can start the 340ms layout transition after script injection.
+        # Observe its completion instead of sampling an intermediate subpixel position.
+        page.evaluate("async () => await Promise.all(document.querySelector('.main').getAnimations().map(a => a.finished))")
         closed=geometry(page)
         q.fill('git')
         page.wait_for_timeout(160)
         opening=geometry(page)
         assert opening['active'] and opening['rowCount']>=2,opening
-        assert 0<opening['panelHeight']<190,opening
+        target=page.locator('.search-combo').evaluate("el=>parseFloat(el.style.getPropertyValue('--suggestion-height'))")
+        assert 0<opening['panelHeight']<target,opening
         page.wait_for_timeout(350)
         full=geometry(page)
         assert full['panelHeight']>opening['panelHeight'],(opening,full)

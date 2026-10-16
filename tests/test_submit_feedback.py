@@ -44,7 +44,7 @@ def test_search_submit_ack_and_delayed_orbit_without_navigation_wait():
         assert 'engine-ring-orbit' in result['ringAnimation'],result
         assert result['ringOpacity'] < .15,result  # ring starts only after the quiet 100ms threshold
         assert 'search-submit-ack' in result['ackAnimation'],result
-        page.wait_for_timeout(330)
+        page.wait_for_function("() => Number(getComputedStyle(document.querySelector('.engine-control'),'::after').opacity) > .9", timeout=2000)
         after=state(page)
         assert after['ringOpacity']>.9,after
         assert 'conic-gradient' in after['ringColor'],after
@@ -65,7 +65,7 @@ def test_url_direct_visit_shows_navigation_ring():
         result=state(page)
         assert result['navigation']=='https://github.com/',result
         assert result['combo'] and result['engine'],result
-        page.wait_for_timeout(270)
+        page.wait_for_function("() => Number(getComputedStyle(document.querySelector('.engine-control'),'::after').opacity) > .9", timeout=2000)
         assert state(page)['ringOpacity']>.9
         browser.close()
 

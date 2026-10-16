@@ -57,7 +57,7 @@ def test_height_shrinks_after_typing_settles_but_grows_immediately():
         browser.close()
 
 
-def test_true_no_results_eventually_closes_and_escape_still_works():
+def test_no_alternatives_keeps_only_current_default_and_escape_still_works():
     with sync_playwright() as p:
         browser = launch_chromium(p)
         page = browser.new_page(viewport={'width': 1200, 'height': 850})
@@ -70,7 +70,9 @@ def test_true_no_results_eventually_closes_and_escape_still_works():
         page.wait_for_timeout(35)
         assert geometry(page)['active']
         page.wait_for_timeout(300)
-        assert not geometry(page)['active'], 'after providers settle with zero results, close the panel'
+        assert geometry(page)['active'], 'the current default remains explicit without alternatives'
+        assert geometry(page)['rowCount'] == 1
+        assert page.locator('.suggestion-default').get_attribute('aria-selected') == 'true'
         q.fill('git')
         page.wait_for_timeout(170)
         q.press('Escape')
@@ -101,15 +103,17 @@ def test_late_online_results_do_not_cause_collapse_and_reopen():
         pending = geometry(page)
         assert pending['active'], pending
         assert pending['panelHeight'] > 0, pending
-        # Retain the previous rows visually while online suggestions are pending,
-        # but prevent navigation of stale results and hide them from assistive tech.
+        # The fresh default is usable while remote alternatives are pending;
+        # the previous query's destinations must already be removed.
         assert pending['rowCount'] > 0, pending
-        assert page.locator('#search-suggestions').evaluate('(node) => node.inert')
-        assert page.locator('#search-suggestions').get_attribute('aria-hidden') == 'true'
-        assert q.get_attribute('aria-expanded') == 'false'
+        assert pending['rowCount'] == 1
+        assert 'zzabcde' in page.locator('.suggestion-default').inner_text()
+        assert not page.locator('#search-suggestions').evaluate('(node) => node.inert')
+        assert page.locator('#search-suggestions').get_attribute('aria-hidden') == 'false'
+        assert q.get_attribute('aria-expanded') == 'true'
         page.wait_for_timeout(280)
         final = geometry(page)
-        assert final['active'] and final['rowCount'] == 1, final
+        assert final['active'] and final['rowCount'] == 2, final
         assert page.locator('#search-suggestions').get_attribute('aria-hidden') == 'false'
         assert not page.locator('#search-suggestions').evaluate('(node) => node.inert')
         browser.close()

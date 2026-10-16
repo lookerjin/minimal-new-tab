@@ -12,10 +12,10 @@
     "https://www.bing.com/*",
     "https://suggestqueries.google.com/*",
     "https://www.baidu.com/*",
-    "https://api.bing.com/*"
-  ],
-  "optional_host_permissions": [
-    "https://*/*"
+    "https://api.bing.com/*",
+    "https://api.github.com/repos/kagisearch/bangs/*",
+    "https://raw.githubusercontent.com/kagisearch/bangs/*",
+    "https://cdn.jsdelivr.net/gh/kagisearch/bangs@*"
   ],
   "chrome_url_overrides": {
     "newtab": "newtab.html"

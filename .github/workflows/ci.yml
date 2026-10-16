@@ -36,7 +36,7 @@ jobs:
       - name: Check JavaScript and unit tests
         run: |
           for file in *.js; do node --check "$file"; done
-          node --test tests/search-core.test.cjs
+          node --test tests/search-core.test.cjs tests/site-search.test.cjs
       - name: Browser integration tests
         run: |
           for file in tests/test_*.py; do

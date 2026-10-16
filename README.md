@@ -6,10 +6,10 @@
 
 ## 功能
 
-- **统一搜索框**：Google / Bing / 百度搜索，以及网址直接跳转；支持方向键、最近搜索、书签建议和在线联想。
+- **统一搜索框**：Google / Bing / 百度搜索，以及网址直接跳转；支持最近搜索、书签建议和在线联想。Tab / Shift+Tab 或上下方向键轮换建议，Enter 确认；右方向键接受首条建议的灰字补全。列表底部提供快捷键提示，未选择建议时直接回车仍提交原输入。
 - **流畅交互**：搜索建议按需加载、候选异步合并与稳定高度过渡、提交反馈与轻量胶囊流光。
 - **书签导航**：本地只读书签检索和分层侧边栏，不会修改书签。
-- **背景**：跟随系统、白色、黑色、本地图片、必应每日壁纸、HTTPS 图片直链。
+- **背景**：统一的“背景”卡片配置，提供跟随系统、纯色、必应每日背景及四张离线内置图片；支持多选添加与删除上传的图片，添加与设置分开。Bing 壁纸支持缓存、跨日检查、联网重试及换图淡入淡出。
 - **双语与辅助功能**：简体中文 / 英语、键盘导航、`prefers-reduced-motion`。
 - **配置同步**：设置保存在浏览器 `chrome.storage.sync` 中；本机上传的壁纸图片存于 IndexedDB，不跨设备同步。
 
@@ -37,7 +37,7 @@
 | `favicon` | 使用浏览器已缓存的网站图标 |
 | Google / Bing / Baidu 联想域名 | 在线搜索建议开启后，向当前搜索引擎发送输入关键词；关闭后不发送联想请求 |
 | `www.bing.com` | 选择必应每日壁纸时下载图像 |
-| 可选 HTTPS 域名权限 | 用户选择特定远程壁纸时，按需申请访问权限 |
+| GitHub API / Raw、jsDelivr | 后台检查并下载社区维护的站内搜索规则；不携带搜索词、书签或壁纸 |
 
 本地壁纸图片仅保存在用户设备的 IndexedDB 中。项目不自行搭建遥测或用户信息服务。**隐私政策草案**：见 [docs/PRIVACY.md](docs/PRIVACY.md)（正式提交前须确认公开 URL 和数据披露）。
 
@@ -46,24 +46,54 @@
 要求：Node.js 22+、Python 3.12+、Chromium（或 Playwright Chromium）。
 
 ```sh
-node --test tests/search-core.test.cjs
+node --test tests/search-core.test.cjs tests/site-search.test.cjs
 python -m pip install -r requirements-test.txt
 python -m playwright install chromium
 python -m pytest -q tests/
-python scripts/package.py --version v1.5.12
+python scripts/package.py --version v1.5.14
 ```
 
-打包脚本生成 `dist/minimal-new-tab-v1.5.12-edge.zip`，其中 `manifest.json` 位于 ZIP 根目录，并附带 SHA-256 校验文件。测试使用模拟的浏览器 API，不等于已完成真实 Edge 扩展安装验收。
+打包脚本生成 `dist/minimal-new-tab-v1.5.14-edge.zip`，其中 `manifest.json` 位于 ZIP 根目录，并附带 SHA-256 校验文件。测试包含使用真实 IndexedDB 的页面集成测试、模拟的浏览器 API，以及在临时 Chromium 配置中加载真实 MV3 扩展的冒烟测试；Bing 故障与跨日场景使用可控响应，不等于已完成 Edge 商店分发验收。
+
+## 站内搜索
+
+输入 `@` 查看常用站点，继续输入名称或快捷词缩小范围，Tab / Shift+Tab 轮换，Enter 进入站内搜索。也可以直接输入 `@github `，或粘贴 `@gh Go 中文教程`；左侧搜索引擎控件会临时显示紧凑站点标签。输入完整站点名（例如 `github`）时，建议列表也提供“切换到 GitHub 搜索”入口。
+
+进入后直接键入关键词并回车。有建议时 Esc 先收起建议，再按一次退出站内搜索；标签上的 × 或空输入时的 Backspace 可以直接退出。退出保留关键词，默认搜索引擎不变。左侧主按钮始终打开搜索目标菜单，可用 Tab / Shift+Tab 和 Enter 选择引擎，切回普通搜索时保留关键词。站内建议仅使用该站点的本机搜索记录与同域书签，不向通用搜索引擎请求联想；站内搜索记录单独保存在本机，合计最多 100 条。
+
+普通查询和站内查询的第一行明确显示当前默认动作；默认回车搜索原输入，明确网址则直接访问。首按 Tab 选择第一条替代建议，Shift+Tab 反向轮换，循环可回到默认动作。↑↓ 提供相同的轮换能力。选择不改输入、不移动焦点，继续打字或点击输入框会取消选择；点击提交按钮与 Enter 执行同一目标。只有默认动作、没有替代建议时，Tab 保持正常焦点导航，Esc 收起后也可正常离开输入框。输入法选字期间不显示候选、不提交。
+
+首次键入就按 Tab 时，也会保留这次轮换意图，等待本地建议准备；不等待在线联想。继续编辑、收起建议、移出焦点或切换范围会取消旧的等待，Enter 始终立即按当前明确动作执行。
+
+书签也支持标题或网址前缀的灰字补全；按右方向键接受后，Enter 打开该书签。补全是可选捷径，主要路径可以直接用 Tab / Shift+Tab 选择建议、Enter 执行，焦点留在输入框。默认动作行不参与灰字来源，未选择建议或接受补全时，Enter 按原输入处理。底部提示随高亮项显示确认、打开或切换，Esc 始终表示先收起建议。
+
+规则复用 [Kagi Bangs](https://github.com/kagisearch/bangs) 社区数据，遵循 MIT 许可，署名见 `LICENSE-KAGI-BANGS.txt`。扩展内置一万余条规则的快照，启动优先读取本地 IndexedDB 缓存，无缓存时读取打包快照。仅支持普通 HTTP(S) 搜索 URL 模板，跳过正则替换、动态主机等不支持的规则，因此不是所有上游 bang 都可用。
+
+后台通常每天检查一次数据版本：通过 GitHub API 获取提交号，再按同一固定版本从 GitHub Raw 下载，失败时回退 jsDelivr；每次请求最多等待 6.5 秒。下载后先校验再写入，失败保留旧缓存，15 分钟后才可重试；联网恢复和页面重新获得焦点会尝试检查，多标签页通过数据库租约避免重复下载。规则下载不阻塞搜索，更新无需重新打包扩展。API 本身不可达时也继续使用本地数据。远程规则是数据，不加载远程脚本。
+
+网络可用性与运营商、代理和上游状态有关；离线兜底不依赖这些服务。规则只决定跳转地址，目标站点自身仍需可访问。
+
+## 背景配置
+
+打开设置中的“背景”，系统模式、纯色、Bing 和图片都在同一个卡片网格中。内置雪山、极光、沙丘、海岸四张本地 WebP 背景，无需下载即可使用。
+
+卡片区最多显示三行，更多内容在整个网格内一起滚动；模式始终排在前面，新上传图片紧随其后，桌面布局从第二行最前面开始显示。
+
+可一次添加多张图片（每张不超过 20MB），最多导入 50 张，四张内置图片不占导入名额；超额会显示提示，删除后可继续添加。添加仅保存，点击图片才应用；取消文件选择会保留背景配置页。进入“管理”后可勾选、全选并批量删除上传的图片，内置选项保留。删除当前上传背景后回退为跟随系统。关闭配置页后直接回到新标签页，设置菜单保持关闭。界面复用现有玻璃面板、按钮、图标与动画缓动，并遵循系统减少动态效果的偏好。
+
+Bing 卡片显示当前缓存的真实图片预览，更新成功后同步刷新；切换到其他背景仍保留预览，打开配置不会额外下载 Bing 图片。首次没有缓存时显示 Bing 标识，选择每日背景后加载实际图片。
+
+上传的原图与缩略图均保存在本机 IndexedDB，旧版单张本地图片和远程图片配置不做迁移。
 
 ## 发布
 
-- `feat/**` → Pull Request → `main` → Actions 的 **Release / Run workflow** → 自动 annotated Tag + GitHub Release。
+- 功能分支 → Pull Request → `main` → Actions 的 **Release / Run workflow** → 自动 annotated Tag + GitHub Release。
 - GitHub Actions 负责完整回归、一次打包及校验，Release 直接复用已通过 CI 的 ZIP；仍保留手动推送版本 Tag 的备用触发方式。
 - 首次 Edge Add-ons Hidden 发布需要通过微软 Partner Center 手动提交；后续版本可进一步接入官方 Update API。
 - 详见 [发布说明](docs/RELEASING.md) 与 [更新日志](CHANGELOG.md)。
 
 ## 其他说明
 
-本仓库的源码可见性与 Edge 商店的 Public / Hidden 选项相互独立。品牌搜索引擎图标归各自权利人所有。Fluent 图标许可证详见 `LICENSE-FLUENT-ICONS.txt`；项目整体的代码许可方式尚未正式指定。
+本仓库的源码可见性与 Edge 商店的 Public / Hidden 选项相互独立。品牌搜索引擎图标归各自权利人所有。Fluent 图标许可证详见 `LICENSE-FLUENT-ICONS.txt`，Kagi Bangs 规则许可见 `LICENSE-KAGI-BANGS.txt`；项目整体的代码许可方式尚未正式指定。
 
 开发过程中的长期历史笔记保留在 [历史文档](docs/DEVELOPMENT_NOTES_LEGACY.md) 中。

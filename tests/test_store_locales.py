@@ -27,3 +27,8 @@ def test_localized_manifest_and_package():
             assert path in z.namelist()
             assert json.loads(z.read(path))
         assert z.testzip() is None
+        for name in ('alpine','aurora','dunes','coast'):
+            path=f'assets/backgrounds/{name}.webp'
+            data=z.read(path)
+            assert data[:4] == b'RIFF' and data[8:12] == b'WEBP'
+            assert data == (ROOT/path).read_bytes()

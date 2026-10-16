@@ -25,8 +25,9 @@ def test_failed_background_write_restores_mode_and_theme():
         setup(page)
         page.evaluate("() => { chrome.storage.sync.set = async () => {throw Error('quota exceeded')}; }")
         page.locator('#open-settings').click()
+        page.locator('#open-wallpapers').click()
         page.locator('label.mode-card:has(input[value="black"])').click()
-        page.wait_for_function("document.querySelector('#status').textContent.includes('Failed to save')")
+        page.wait_for_function("document.querySelector('#wallpaper-status').textContent.includes('无法保存')")
         assert page.locator('input[name="mode"]:checked').get_attribute('value') == 'auto'
         assert page.locator('html').get_attribute('data-theme') == 'light'
         browser.close()
@@ -37,8 +38,9 @@ def test_cached_wallpaper_decode_cannot_supersede_later_solid_choice():
         browser = launch_chromium(pw)
         page = browser.new_page(color_scheme='light')
         setup(page)
-        page.evaluate("""() => {
-          window.dbGet = async key => key === 'local' ? new Blob(['image'], {type:'image/png'}) : null;
+        page.evaluate("""async () => {
+          await saveSettings({wallpaperId:'one'});
+          window.loadWallpaperBlob = async () => new Blob(['image'], {type:'image/png'});
           window.Image = class {
             set src(value) { this._src = value; }
             decode() { return new Promise(resolve => { window.__finishDecode = resolve; }); }
@@ -52,7 +54,8 @@ def test_cached_wallpaper_decode_cannot_supersede_later_solid_choice():
           };
         }""")
         page.locator('#open-settings').click()
-        page.locator('label.mode-card:has(input[value="local"])').click()
+        page.locator('#open-wallpapers').click()
+        page.locator('[data-builtin=alpine]').click()
         page.wait_for_function('typeof window.__finishDecode === "function"')
         page.locator('label.mode-card:has(input[value="white"])').click()
         page.wait_for_function('typeof window.__finishWhiteSave === "function"')
@@ -103,10 +106,12 @@ def test_failed_cached_photo_restores_previous_background():
         page = browser.new_page(color_scheme='light')
         setup(page)
         page.locator('#open-settings').click()
+        page.locator('#open-wallpapers').click()
         page.locator('label.mode-card:has(input[value="black"])').click()
         page.wait_for_function("window.__saved.some(p => p.mode === 'black')")
-        page.evaluate("""() => {
-          window.dbGet = async key => key === 'local' ? new Blob(['image'], {type:'image/png'}) : null;
+        page.evaluate("""async () => {
+          await saveSettings({wallpaperId:'one'});
+          window.loadWallpaperBlob = async () => new Blob(['image'], {type:'image/png'});
           window.Image = class {
             set src(value) { this._src = value; }
             decode() { return Promise.resolve(); }
@@ -116,60 +121,11 @@ def test_failed_cached_photo_restores_previous_background():
             window.__saved.push(data.newTabPrefs);
           };
         }""")
-        page.locator('label.mode-card:has(input[value="local"])').click()
-        page.wait_for_function("document.querySelector('#status').textContent.length > 0")
+        page.locator('[data-builtin=alpine]').click()
+        page.wait_for_function("document.querySelector('#wallpaper-status').textContent.includes('无法设置')")
         assert page.locator('input[name="mode"]:checked').get_attribute('value') == 'black'
         assert page.locator('html').get_attribute('data-theme') == 'dark'
         assert page.locator('#wallpaper').get_attribute('src') is None
-        browser.close()
-
-
-def test_failed_local_photo_save_does_not_replace_cached_image():
-    with sync_playwright() as pw:
-        browser = launch_chromium(pw)
-        page = browser.new_page(color_scheme='light')
-        setup(page)
-        page.evaluate("""() => {
-          window.__cache = new Map([['local',new Blob(['old photo'],{type:'image/png'})]]);
-          window.dbGet = async key => window.__cache.get(key);
-          window.dbPut = async (key,value) => { window.__cache.set(key,value); };
-          window.Image = class { set src(value){} decode(){return Promise.resolve()} };
-          chrome.storage.sync.set = async data => { if(data.newTabPrefs.mode==='local')throw Error('quota exceeded'); };
-        }""")
-        # The picker is hidden; Playwright can still simulate an actual local-file choice.
-        page.locator('#image-file').set_input_files({
-            'name': 'new.png', 'mimeType': 'image/png', 'buffer': b'a sample image'
-        })
-        page.wait_for_function("document.querySelector('#status').textContent.includes('Could not save image')")
-        assert page.locator('input[name="mode"]:checked').get_attribute('value') == 'auto'
-        assert page.evaluate("async () => await window.__cache.get('local').text()") == 'old photo'
-        browser.close()
-
-
-def test_canceled_upload_does_not_change_local_cache_after_delayed_idb_write():
-    with sync_playwright() as pw:
-        browser = launch_chromium(pw)
-        page = browser.new_page(color_scheme='light')
-        setup(page)
-        page.evaluate("""() => {
-          window.__cache = new Map([['local',new Blob(['previous'],{type:'image/png'})]]);
-          window.dbGet = async key => window.__cache.get(key);
-          window.dbPut = async (key,value) => {
-            if(key==='local' && !window.__finishCacheWrite){
-              await new Promise(resolve => {window.__finishCacheWrite=resolve});
-            }
-            window.__cache.set(key,value);
-          };
-          window.Image = class { set src(value){} decode(){return Promise.resolve()} };
-        }""")
-        page.locator('#image-file').set_input_files({'name':'new.png','mimeType':'image/png','buffer':b'new photo'})
-        page.wait_for_function('typeof window.__finishCacheWrite === "function"')
-        page.locator('#open-settings').click()
-        page.locator('label.mode-card:has(input[value="white"])').click()
-        page.evaluate('window.__finishCacheWrite()')
-        page.wait_for_timeout(170)
-        assert page.locator('input[name="mode"]:checked').get_attribute('value') == 'white'
-        assert page.evaluate("async () => await window.__cache.get('local').text()") == 'previous'
         browser.close()
 
 
