@@ -2,7 +2,7 @@
 
 一个本地优先、简洁快速的桌面 **Microsoft Edge / Chromium 新标签页扩展**。使用 Manifest V3、原生 HTML/CSS/JavaScript；不依赖服务器、构建框架或运行时第三方 JS 包。
 
-> 当前仓库开发版本：**1.5.14（尚未发布）**；最近正式发行版：**v1.5.13**。正式 ZIP 由 GitHub Actions 发布到 GitHub Release；Edge 商店上架仍在准备中。
+> 当前仓库开发版本：**1.5.15（尚未发布）**；最近正式发行版：**v1.5.14**。正式 ZIP 由 GitHub Actions 发布到 GitHub Release；Edge 商店上架仍在准备中。
 
 ## 功能
 
@@ -50,10 +50,10 @@ node --test tests/search-core.test.cjs tests/site-search.test.cjs
 python -m pip install -r requirements-test.txt
 python -m playwright install chromium
 python -m pytest -q tests/
-python scripts/package.py --version v1.5.14
+python scripts/package.py --version v1.5.15
 ```
 
-打包脚本生成 `dist/minimal-new-tab-v1.5.14-edge.zip`，其中 `manifest.json` 位于 ZIP 根目录，并附带 SHA-256 校验文件。测试包含使用真实 IndexedDB 的页面集成测试、模拟的浏览器 API，以及在临时 Chromium 配置中加载真实 MV3 扩展的冒烟测试；Bing 故障与跨日场景使用可控响应，不等于已完成 Edge 商店分发验收。
+打包脚本生成 `dist/minimal-new-tab-v1.5.15-edge.zip`，其中 `manifest.json` 位于 ZIP 根目录，并附带 SHA-256 校验文件。测试包含使用真实 IndexedDB 的页面集成测试、模拟的浏览器 API，以及在临时 Chromium 配置中加载真实 MV3 扩展的冒烟测试；Bing 故障与跨日场景使用可控响应，不等于已完成 Edge 商店分发验收。
 
 ## 站内搜索
 

@@ -1,4 +1,4 @@
-# Microsoft Edge Add-ons — submission drafts (v1.5.14)
+# Microsoft Edge Add-ons — submission drafts (v1.5.15)
 
 Status: draft; do not submit until the package has passed real Edge installation testing and the privacy URL is live.
 
