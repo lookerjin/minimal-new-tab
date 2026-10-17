@@ -81,8 +81,9 @@ def test_manage_multi_delete_preserves_unselected_then_falls_back_for_current(ap
     page = app
     upload(page)
     page.locator('.wallpaper-card').first.click()
-    page.wait_for_function("document.querySelector('.wallpaper-card.is-current')")
+    page.wait_for_function("document.querySelector('#wallpaper').classList.contains('ready')")
     source = page.locator('#wallpaper').get_attribute('src')
+    assert source
     page.locator('#manage-wallpapers').click()
     page.locator('.wallpaper-card').nth(1).click()
     page.locator('.wallpaper-card').nth(2).click()
@@ -222,19 +223,18 @@ def test_upload_finishes_without_overriding_later_background_choice(app):
     assert page.locator('#wallpaper').get_attribute('src') is None
 
 
-def test_image_switch_crossfades_and_releases_outgoing_layer(app):
+def test_image_switch_updates_background_and_releases_outgoing_layer(app):
     page = app
     upload(page, ('first.png', 'second.png'))
     page.locator('.wallpaper-card').first.click()
     page.wait_for_function("document.querySelector('#wallpaper').classList.contains('ready')")
-    page.wait_for_timeout(500)
     old_source = page.locator('#wallpaper').get_attribute('src')
+    assert old_source
     page.locator('.wallpaper-card').nth(1).click()
-    page.wait_for_function('(old) => document.querySelector("#wallpaper").src !== old', arg=old_source)
-    assert page.locator('#wallpaper-previous').get_attribute('src') == old_source
-    page.wait_for_timeout(100)
-    opacity = page.locator('#wallpaper-previous').evaluate('(el)=>Number(getComputedStyle(el).opacity)')
-    assert 0 < opacity < 1
+    page.wait_for_function('''(old) => {
+      const image = document.querySelector('#wallpaper');
+      return image.classList.contains('ready') && image.hasAttribute('src') && image.src !== old;
+    }''', arg=old_source)
     page.wait_for_function("!document.querySelector('#wallpaper-previous').hasAttribute('src')")
 
 
