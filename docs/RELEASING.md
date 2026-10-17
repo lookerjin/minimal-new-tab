@@ -35,7 +35,7 @@ node --test tests/search-core.test.cjs tests/site-search.test.cjs
 python -m pip install -r requirements-test.txt
 python -m playwright install chromium
 python -m pytest -q tests/
-python scripts/package.py --version v1.5.14
+python scripts/package.py --version v1.5.15
 ```
 
 Browser tests include mock extension APIs, real IndexedDB, and an unpacked MV3 Chromium smoke test; they do not replace real Edge store-install acceptance.
